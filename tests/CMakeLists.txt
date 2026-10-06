@@ -94,3 +94,32 @@ add_test(NAME mhd_t1_residuals
          COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/regression/run_t0.sh
                  $<TARGET_FILE:t1_residuals> --baseline t1_residuals)
 set_tests_properties(mhd_t1_residuals PROPERTIES LABELS "tier1" TIMEOUT 300)
+
+# --------------------------------------------------------------------------------------
+# Kinetic regression harness: each case runs one kinetic executable on a reduced deck
+# from regression/kinetic/decks/ and hashes every number it writes (particle swarm,
+# field grid, diagnostics files). Gate for the kinetic/pgen refactor, which must leave
+# every hash unchanged. Fixtures (CPU-layout fields.h5, relaxed MHD state X_4.petscbin)
+# are in regression/kinetic/fixtures/. See docs/kinetic/testing.md.
+#
+# The light cases load the pre-interpolated field grid and need no MHD solve (seconds).
+# kin_hybrid runs the coupled MHD solve and takes several minutes, so it carries its
+# label `slow` (not `kinetic`, which ctest -L would match as a regex) and needs
+# about 4 GB of memory, so run it alone.
+# --------------------------------------------------------------------------------------
+set(KINETIC_HARNESS ${CMAKE_CURRENT_SOURCE_DIR}/regression/kinetic)
+function(add_kinetic_test name exe deck label threads)
+  add_test(NAME kin_${name}
+           COMMAND ${KINETIC_HARNESS}/run_kinetic.sh $<TARGET_FILE:${exe}>
+                   ${KINETIC_HARNESS}/decks/${deck}.input --baseline kin_${name}
+                   --threads ${threads} ${ARGN})
+  set_tests_properties(kin_${name} PROPERTIES LABELS "${label}" TIMEOUT 3600)
+endfunction()
+
+# conservation gates at 1 thread: its conservation.dat totals come from a
+# parallel_reduce whose summation order follows the OpenMP thread split.
+add_kinetic_test(conservation             conservation    conservation             kinetic 1 parthenon/time/nlim=4)
+add_kinetic_test(conservation_dopri5_nocoll conservation  conservation_dopri5_nocoll kinetic 4 parthenon/time/nlim=4)
+add_kinetic_test(profile                  profile         profile                  kinetic 4 parthenon/time/nlim=4)
+add_kinetic_test(single_particle          single_particle single_particle          kinetic 4 parthenon/time/nlim=4)
+add_kinetic_test(hybrid                   hybrid          hybrid                   slow    4 parthenon/time/nlim=1)

@@ -20,10 +20,10 @@ if [ ! -x "$PYTHON" ]; then
   python3 -m venv "$VENV"
 fi
 
-if ! "$PYTHON" -c 'import numpy, matplotlib' 2>/dev/null; then
-  echo "installing numpy and matplotlib"
+if ! "$PYTHON" -c 'import numpy, matplotlib, h5py' 2>/dev/null; then
+  echo "installing numpy, matplotlib and h5py"
   "$VENV/bin/pip" install --quiet --upgrade pip
-  "$VENV/bin/pip" install --quiet numpy matplotlib
+  "$VENV/bin/pip" install --quiet numpy matplotlib h5py
 fi
 
 "$PYTHON" - <<'EOF'
