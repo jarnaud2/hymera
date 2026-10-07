@@ -75,7 +75,6 @@ PAR_SWARMVAR(Real, particle, saved_Z);
 PAR_SWARMVAR(Real, particle, saved_w);
 
 std::shared_ptr<StateDescriptor> Initialize(ParameterInput *pin, User* mhd_context);
-std::shared_ptr<StateDescriptor> InitializeAnalytic(ParameterInput *pin);
 void ComputeParticleWeights(Mesh* pm);
 
 TaskStatus MakeOutputs(Outputs* pouts, Mesh* pmesh, ParameterInput* pinput, Real time, int iPR);
