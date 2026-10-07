@@ -841,8 +841,11 @@ std::shared_ptr<StateDescriptor> InitializeAnalytic(ParameterInput *pin) {
 // Dump the raw, pre-interpolated field grid (the Hermite/Taylor coefficient
 // arrays the particle push consumes) plus geometry to a single HDF5 file, so a
 // separate `profile` run can load it and exercise PushParticles without MHD.
-// Views are stored flat (contiguous, layout as-built); producer and consumer
-// share the build so shapes/layout match exactly. Rank 0 writes; the field
+// The FieldData views are stored flat in their memory order. hFlux fixes their
+// layouts explicitly, so that order is the same on every backend. The CDG
+// indicator has the default layout of the execution space (LayoutLeft on CUDA,
+// LayoutRight on host), so it is written in a fixed row-major order (R index
+// slowest) and the file is marked field_io_version 2. Rank 0 writes; the field
 // grid is a full-domain replicated array.
 void SaveRawFieldData(Mesh * pm, const char* filename) {
   if (Globals::my_rank != 0) return;
@@ -871,8 +874,15 @@ void SaveRawFieldData(Mesh * pm, const char* filename) {
   H5::writeVector(vgroup, "data",         data_h.data(), static_cast<int>(data_h.size()));
   H5::writeVector(vgroup, "hermite_data", herm_h.data(), static_cast<int>(herm_h.size()));
   H5::writeVector(vgroup, "psi_data",     psi_h.data(),  static_cast<int>(psi_h.size()));
-  H5::writeVector(vgroup, "indicator",    indicator_h.data(), static_cast<int>(indicator_h.size()));
+  const int ind_nR = indicator_h.extent(0);
+  const int ind_nZ = indicator_h.extent(1);
+  std::vector<int> indicator_row_major(ind_nR * ind_nZ);
+  for (int i = 0; i < ind_nR; ++i)
+    for (int j = 0; j < ind_nZ; ++j)
+      indicator_row_major[i * ind_nZ + j] = indicator_h(i, j);
+  H5::writeVector(vgroup, "indicator", indicator_row_major);
 
+  H5::writeScalar(sgroup, "field_io_version", 2);
   int hermite_nR = data.hermite_locator.nR;
   int hermite_nZ = data.hermite_locator.nZ;
   int fd_nR = data.fd_locator.nR;
@@ -885,6 +895,36 @@ void SaveRawFieldData(Mesh * pm, const char* filename) {
   H5::writeScalar(sgroup, "Zc", Zc);
 
   std::cout << std::format("Saved raw field data to {}\n", filename);
+}
+
+// Element order of the indicator stored in a raw field file. Version-2 files
+// are row-major. Older files hold the producing build's memory order: row-major
+// from a host build, column-major from a CUDA build. That order is recovered by
+// comparing the file with the indicator read from Geometry/input_file, which
+// the producing run also used.
+template <typename HostIndicator>
+static bool IndicatorFileIsRowMajor(H5::Group &sgroup, const std::vector<int> &file,
+                                    const HostIndicator &geometry, const char *filename) {
+  if (sgroup.attrExists("field_io_version")) {
+    int version = 0;
+    H5::readScalar(sgroup, "field_io_version", version);
+    if (version >= 2) return true;
+  }
+  const int nR = geometry.extent(0);
+  const int nZ = geometry.extent(1);
+  bool row_major = true, col_major = true;
+  for (int i = 0; i < nR; ++i)
+    for (int j = 0; j < nZ; ++j) {
+      row_major = row_major && file[i * nZ + j] == geometry(i, j);
+      col_major = col_major && file[j * nR + i] == geometry(i, j);
+    }
+  if (row_major) return true;
+  if (col_major) return false;
+  throw std::runtime_error(std::format(
+      "LoadRawFieldData: the indicator in {} matches Geometry/input_file in neither "
+      "row- nor column-major order. The file predates field_io_version 2, so its "
+      "element order cannot be determined; use the geometry file of the producing run.",
+      filename));
 }
 
 // Inverse of SaveRawFieldData: fill the (already-constructed) FieldData grid and
@@ -926,8 +966,18 @@ void LoadRawFieldData(Mesh * pm, const char* filename) {
   data.hermite_data.sync_device();
   data.psi_data.sync_device();
 
-  auto indicator_h = Kokkos::create_mirror_view(cdg.indicator_view);
-  H5::readVector(vgroup, "indicator", indicator_h.data(), static_cast<int>(indicator_h.size()));
+  // The indicator already holds the geometry read from Geometry/input_file in
+  // Initialize. The file's copy replaces it.
+  auto indicator_h = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), cdg.indicator_view);
+  const int ind_nR = indicator_h.extent(0);
+  const int ind_nZ = indicator_h.extent(1);
+  std::vector<int> indicator_file(ind_nR * ind_nZ);
+  H5::readVector(vgroup, "indicator", indicator_file.data(), static_cast<int>(indicator_file.size()));
+  const bool row_major = IndicatorFileIsRowMajor(sgroup, indicator_file, indicator_h, filename);
+  for (int i = 0; i < ind_nR; ++i)
+    for (int j = 0; j < ind_nZ; ++j)
+      indicator_h(i, j) = row_major ? indicator_file[i * ind_nZ + j]
+                                    : indicator_file[j * ind_nR + i];
   Kokkos::deep_copy(cdg.indicator_view, indicator_h);
 
   Real Rc = 0.0, Zc = 0.0;

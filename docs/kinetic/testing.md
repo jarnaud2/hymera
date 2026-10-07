@@ -64,13 +64,13 @@ re-records baselines once, in a commit of its own that changes nothing else.
 - `fixtures/X_4.petscbin`: relaxed MHD state, loaded with `MHD_Config/ic_binary_load=1`
   so that `kin_hybrid` skips the relaxation solve.
 
-`inputs/fields.h5` is **not** used: it was written by a CUDA build. `SaveRawFieldData`
-and `LoadRawFieldData` write and read raw view memory, and Kokkos uses `LayoutLeft`
-on CUDA but `LayoutRight` on OpenMP. A CPU build therefore reads that file
-transposed. Its indicator map then puts the seed point of `conservation.input`
-in a region-0 cell, and every particle dies with `WallImpact` at t=0, before any
-push. Fixing the field I/O so that it does not depend on layout is the first fix
-after this harness.
+`fixtures/fields.h5` is marked `field_io_version` 2: the indicator is stored
+row-major. Files written before that hold the producing build's memory order,
+which is column-major for a CUDA build (`inputs/fields.h5` is one).
+`LoadRawFieldData` detects the order of such files by comparing them with
+`Geometry/input_file`. Before that fix a CPU build read GPU files transposed, and
+every particle in `conservation.input` died with `WallImpact` at t=0, before
+any push.
 
 ## Negative tests
 
