@@ -504,12 +504,6 @@ std::shared_ptr<StateDescriptor> Initialize(ParameterInput *pin, User* mhd_conte
     pkg->AddSwarmValue(Kinetic::phi::name(), "particles",    real_swarmvalue_metadata);
     pkg->AddSwarmValue(Kinetic::Z::name(), "particles",      real_swarmvalue_metadata);
     pkg->AddSwarmValue(Kinetic::weight::name(),  "particles", real_swarmvalue_metadata);
-    pkg->AddSwarmValue(Kinetic::saved_p::name(), "particles", real_swarmvalue_metadata);
-    pkg->AddSwarmValue(Kinetic::saved_xi::name(), "particles", real_swarmvalue_metadata);
-    pkg->AddSwarmValue(Kinetic::saved_R::name(), "particles", real_swarmvalue_metadata);
-    pkg->AddSwarmValue(Kinetic::saved_phi::name(), "particles", real_swarmvalue_metadata);
-    pkg->AddSwarmValue(Kinetic::saved_Z::name(), "particles", real_swarmvalue_metadata);
-    pkg->AddSwarmValue(Kinetic::saved_w::name(), "particles", real_swarmvalue_metadata);
 
     Metadata int_swarmvalue_metadata({Metadata::Integer, Metadata::Restart});
     pkg->AddSwarmValue(Kinetic::will_scatter::name(), "particles",

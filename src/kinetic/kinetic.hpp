@@ -67,12 +67,6 @@ typedef enum STATUS_ENUM {
     DEATH_BY_WALL=8
 } STATUS;
 PAR_SWARMVAR(int, particle, status);
-PAR_SWARMVAR(Real, particle, saved_p);
-PAR_SWARMVAR(Real, particle, saved_xi);
-PAR_SWARMVAR(Real, particle, saved_R);
-PAR_SWARMVAR(Real, particle, saved_phi);
-PAR_SWARMVAR(Real, particle, saved_Z);
-PAR_SWARMVAR(Real, particle, saved_w);
 
 std::shared_ptr<StateDescriptor> Initialize(ParameterInput *pin, User* mhd_context);
 void ComputeParticleWeights(Mesh* pm);

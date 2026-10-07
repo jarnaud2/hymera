@@ -93,8 +93,8 @@ Each "pass" follows from what the case runs, so none of them is a blind spot.
   `kin_hybrid` does not run (`CheckScatter`, `AddSecondaries`, `CleanupParticles`,
   `RandomRemove`). It has no case yet; add one before refactoring `AvalancheDriver.cpp`.
 - MPI decomposition: every case runs on one rank.
-- `GenerateParticleSquare` and `InitializeAnalytic`: no live caller, so they move to
-  the attic.
+- Code in `src/kinetic/attic/` (not compiled; see its README).
+- `MakeOutputs`: kept as a hook for in-step diagnostics but not called by any driver.
 
 ## Recording a baseline
 
