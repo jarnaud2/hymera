@@ -24,6 +24,7 @@ using namespace parthenon;
 
 #include "kinetic/RunawayDriver.h"
 #include "kinetic/kinetic.hpp"
+#include "kinetic/KineticParams.hpp"
 #include "kinetic/GuidingCenterEquations.hpp"
 #include "kinetic/LargeAngleCollision.hpp"
 #include "kinetic/SmallAngleCollision.hpp"
@@ -42,121 +43,41 @@ using pc = PhysicalConstants<SI>;
 
 namespace Kinetic {
 std::shared_ptr<StateDescriptor> Initialize(ParameterInput *pin, User* mhd_context) {
-  /// Physical constants
-  static constexpr Real eps0 = pc::eps0; ///< Vacuum permittivity [F / M]
-  static constexpr Real c = pc::c;       ///< Speed of light [m/s]
+  /// Physical constants the MHD context needs.
   static constexpr Real mi = pc::amu;    ///< Ion mass = atomic mass unit [kg]
   static constexpr Real mu0 = pc::mu0;   ///< Vacuum permeabulity [N / A^2]
-  static constexpr Real me = pc::me;     ///< electron mass [kg]
-  static constexpr Real e = pc::qe;      ///< electron charge [C]
 
-  /// Time discretization parameters
-  const Real dt_mhd     = pin->GetReal("parthenon/time","dt_force");
-  const Real final_time = pin->GetReal("parthenon/time","tlim");
-
-  const int nCorrectorSteps = pin->GetOrAddInteger("Time","nCorrectorSteps", 0);  ///< current deposit timestep for electric field readjustment [s]
-  const int nCD = pin->GetOrAddInteger("Time","nCD", 100);  ///< current deposit timestep for electric field readjustment [s]
-  Real dtLA_over_tauC = pin->GetOrAddReal("Time","dtLA_over_tauC", 1e-5);  ///< current deposit timestep for electric field readjustment [s]
-
-  const Real timeStep = pin->GetOrAddReal("Simulation", "hRK", 1.e-6);    /// Runge kutta time in tau_c [-]
-  const Real atol = pin->GetOrAddReal("Simulation", "atol", 1.e-6);      /// Absoulte tolerance for RK [-]
-  const Real rtol = pin->GetOrAddReal("Simulation", "rtol", 1.e-5);       /// Realative toleratnce for RK[ [-]
-  const int integrator = parseIntegrator(pin->GetOrAddString("Simulation", "integrator", "dopri5")); /// ODE integrator: dopri5 (adaptive) or rk4 (fixed hRK)
-  const std::string filePath = pin->GetOrAddString("Simulation", "file_path", "current.out");
-
-  /// Reference parameters
-  const Real B0 = pin->GetOrAddReal("Reference", "B0", 5.3);  ///< On-axis magnetic field [T]
-  const Real a  = pin->GetOrAddReal("Reference", "a", 2.0);    ///< Minor radius [m] and reference length
-  const Real R0 = pin->GetOrAddReal("Reference", "R0", 6.0);    ///< Major radius [m]
-  const Real nD0 = pin->GetOrAddReal("Reference", "nD0", 1e20);    ///< Deutirium density [m^-3]
-  const Real Te0 = pin->GetOrAddReal("Reference", "Te0", 2.0198);  ///< Electron temperature [eV], and plasma temperature single-temperature model
-
-  /// Derived parameters
-  const Real VA   = pin->GetOrAddReal("Derived", "VA",  B0 / sqrt(mi * nD0 * mu0)); ///< Alfven velocity [m/s]
-  const Real tauA = pin->GetOrAddReal("Derived", "tauA", a / VA);                  ///< Alfven time     [s]
-  const Real E0   = pin->GetOrAddReal("Derived", "E0", B0 * VA);                   ///< Reference electric field in MHD [V/m]
-  const Real J0   = pin->GetOrAddReal("Derived", "J0", B0 / (mu0 * a));            ///< Reference current density [A/m^2]
-  const Real eta0 = pin->GetOrAddReal("Derived", "eta0", a * VA * mu0);            ///< Reference resitivity [Ohm*m]
-  const Real eta  = pin->GetOrAddReal("Derived", "eta",  1.0);                     ///< Resitivity scale     [-]
-  const Real Re   = pin->GetOrAddReal("Derived", "Re",  200.0);                    ///< Reinolds Number
-
-  ///< Plasma composition parameters
-  const Real vTe = sqrt(2.0*Te0*e / me); ///< Thermal velocity
-  const Real Z0 = pin->GetOrAddReal("Plasma", "Z0", 10.0); ///< Atomic number of impurity (Z)
-  const Real ZI = pin->GetOrAddReal("Plasma", "ZI", 1.0);  ///< Charge of impurity
-  const Real fI = pin->GetOrAddReal("Plasma", "fI", 1.0);  ///<Fraction of impurity density, normalized to deuterium denstiy (nD0)
-  const Real nI = fI*nD0; ///< Impurity density [m^-3]
-  const Real n_e0 = nD0 + ZI*nI; ///< Free electron density [m^-3]
-  const Real Zeff = pin->GetOrAddReal("Plasma", "Zeff", (ZI*ZI*nI + nD0)/n_e0); // TODO: why ZI is a square?
-  const Real NeI = Z0 - ZI; ///< Number of bound electrons
-  const Real Coulog0 = pin->GetOrAddReal("Plasma", "Coulog0", 14.9 - 0.5*log(n_e0/1.0e20) + log(Te0/1.e3));
-  Real Rc = pin->GetOrAddReal("Plasma", "Rc", 3.1158966549999998e+00); ///< Initial guess for magnetic axis, R [-], length normalized
-  Real Zc = pin->GetOrAddReal("Plasma", "Zc", 3.7114360000000002e-01); ///< Initial guess for magnetic axis, Z [-], length normalized
-
-
-  const Real L11 = 0.58 * 32.0 / (3.0 * M_PI);
-  const Real sigmapar = 12.0 * pow(M_PI, 1.5) / sqrt(2.0) * pow(Te0 * e, 1.5) * pow(eps0, 2) / (Zeff * pow(e, 2) * sqrt(me) * Coulog0) * L11;
-  const Real etaplasma = pin->GetOrAddReal("Plasma", "etaplasma", 1.0 / sigmapar);
-
-  ///< Geometry parameters
-  const Real etawall               = pin->GetOrAddReal("Geometry", "etawall", 4.4e-2);                     ///< Wall resistivity [Ohm*m]
-  const Real etawallperp            = pin->GetOrAddReal("Geometry", "etawallperp", etawall);
-  const Real etawallphi             = pin->GetOrAddReal("Geometry", "etawallphi", etawall);
-  const Real etawallphi_isol_cell   = pin->GetOrAddReal("Geometry", "etawallphi_isol_cell", etawall);
-  const Real etasepwal              = pin->GetOrAddReal("Geometry", "etasepwal",  etaplasma);
-  const Real etaVV                  = pin->GetOrAddReal("Geometry", "etaVV",  1.30288e-6);
-  const Real etaout                 = pin->GetOrAddReal("Geometry", "etaout",  1.30288e-3);
-
-  const Real Rmin                   = pin->GetOrAddReal("Geometry", "rmin",  1.525); ///< Minimum R [-]
-  const Real Rmax                   = pin->GetOrAddReal("Geometry", "rmax",  4.975); ///< Maximum R [-]
-  const Real Zmin                   = pin->GetOrAddReal("Geometry", "zmin",  -2.975);///<  Minimum Z [-]
-  const Real Zmax                   = pin->GetOrAddReal("Geometry", "zmax",   2.975); ///< Maximum Z [-]
-
-  const Real gamma_BC  = pin->GetOrAddReal("BoundaryConditions", "gamma_BC", 1. + 1e-4);   // Assuming E max = 1000
-  const Real gamma_min = pin->GetOrAddReal("BoundaryConditions", "gamma_min", 2. * (gamma_BC - 1.) + 1.0);
-  const Real p_BC      = momentum_(gamma_BC);
-  const Real p_RE      = p_BC;  // Updated from maximum electric field during the run.
-
-
-  ///< Runaway parameters
-  const Real c_vTe = pin->GetOrAddReal("Collisions", "c_vTe", c / vTe); ///< Guiding center equations coefficient [-]
-  const int NSA = pin->GetOrAddInteger("Collisions", "NSA", 150);       ///< Number of small angle collisions     [-]
-  const Real k = pin->GetOrAddReal("Collisions", "k", 5.0);
-  const Real aI            = pin->GetOrAddReal("Collisions", "aI", 0.3285296762792767);  ///<
-  const Real FineStructure = 1. / 137.035999;  // Fine Structure constant
-  const Real II            = pin->GetOrAddReal("Collisions", "II", 235.2 / pc::eV / pc::me / pc::c / pc::c); // Mean exitation energy
-  Real PSCoefDnRA = 1.0;
-  if (PartialScreening)
-    PSCoefDnRA    = 1.0 + NeI * fI / (1.0 + ZI * fI);
-
-  ///< Numerical paremters
-  const Real dampV                  = pin->GetOrAddReal("Numerical", "dampV", 0.01); ///< Stabilization coefficeint for velocity gradient
-  const Real itime                  = pin->GetOrAddReal("Numerical", "itime", 0.0); ///< Initial time for mhd counters [sec]
-  const int NR                      = pin->GetOrAddInteger("Numerical", "NR", 100);
-  const int Nphi                    = pin->GetOrAddInteger("Numerical", "Nphi", 2);
-  const int NZ                      = pin->GetOrAddInteger("Numerical", "NZ", 200);
-
-  const Real dR = (Rmax - Rmin) / (Real) NR;
-  const Real dZ = (Zmax - Zmin) / (Real) NZ;
-
-  const Real RminCellCenter = Rmin + .5 * dR;
-  const Real RmaxCellCenter = Rmax - .5 * dR;
-  const Real ZminCellCenter = Zmin + .5 * dZ;
-  const Real ZmaxCellCenter = Zmax - .5 * dZ;
-
-  const Real tau_a = 6*M_PI*eps0*pow(me * c, 3) / pow(e,4) / pow(B0,2);     ///< Syncrotron radiation damping time
-  const Real tau_c = 4*M_PI*pow(eps0,2)*me*me*c*c*c/(e*e*e*e*n_e0*Coulog0); ///< Relativistic collision time
-  const Real Ec = me * c / e / tau_c;                                       ///< Connor-Hastie Electric field
-  const Real En = E0 / Ec;
-  const Real eta_norm = etaplasma / eta0; // converts eta * \curl B to V_A B_0
-  const Real eta_a3VaB0 = etaplasma / pow(a,3) / E0; // converts eta J to V_A B_0
-
-  // Create plotting mesh for interpolated fields
-  const int NR_plot = pin->GetOrAddInteger("Output", "NR_plot", 400);
-  const int NZ_plot = pin->GetOrAddInteger("Output", "NZ_plot", 800);
-  const int Nt_plot = pin->GetOrAddInteger("Output", "Nt_plot", 10);
-
-  const Real E_0 = pin->GetOrAddInteger("AnalyticField", "E_0", 40.0);
+  // Read the deck and derive the normalisation (see KineticParams.hpp). The
+  // names below are the ones the rest of this function has always used.
+  const KineticParams prm = KineticParams::FromInput(pin);
+  const Real &dt_mhd = prm.dt_mhd, &final_time = prm.final_time;
+  const int &nCorrectorSteps = prm.nCorrectorSteps, &nCD = prm.nCD;
+  const Real &dtLA_over_tauC = prm.dtLA_over_tauC;
+  const Real &timeStep = prm.timeStep, &atol = prm.atol, &rtol = prm.rtol;
+  const int &integrator = prm.integrator;
+  const std::string &filePath = prm.filePath;
+  const Real &B0 = prm.B0, &a = prm.a, &nD0 = prm.nD0;
+  const Real &VA = prm.VA, &tauA = prm.tauA, &eta0 = prm.eta0, &eta = prm.eta, &Re = prm.Re;
+  const Real &Z0 = prm.Z0, &ZI = prm.ZI, &fI = prm.fI, &Zeff = prm.Zeff, &NeI = prm.NeI;
+  const Real &Coulog0 = prm.Coulog0;
+  Real Rc = prm.Rc, Zc = prm.Zc;  // updated by the magnetic-axis search below
+  const Real &etaplasma = prm.etaplasma, &etawall = prm.etawall, &etawallperp = prm.etawallperp;
+  const Real &etawallphi = prm.etawallphi, &etawallphi_isol_cell = prm.etawallphi_isol_cell;
+  const Real &etasepwal = prm.etasepwal, &etaVV = prm.etaVV, &etaout = prm.etaout;
+  const Real &Rmin = prm.Rmin, &Rmax = prm.Rmax, &Zmin = prm.Zmin, &Zmax = prm.Zmax;
+  const Real &gamma_min = prm.gamma_min, &p_BC = prm.p_BC, &p_RE = prm.p_RE;
+  const Real &c_vTe = prm.c_vTe;
+  const int &NSA = prm.NSA;
+  const Real &k = prm.k, &aI = prm.aI, &FineStructure = prm.FineStructure, &II = prm.II;
+  const Real &PSCoefDnRA = prm.PSCoefDnRA;
+  const Real &dampV = prm.dampV, &itime = prm.itime;
+  const int &NR = prm.NR, &Nphi = prm.Nphi, &NZ = prm.NZ;
+  const Real &dR = prm.dR, &dZ = prm.dZ;
+  const Real &RminCellCenter = prm.RminCellCenter, &ZminCellCenter = prm.ZminCellCenter;
+  const Real &tau_a = prm.tau_a, &tau_c = prm.tau_c, &En = prm.En;
+  const Real &eta_norm = prm.eta_norm, &eta_a3VaB0 = prm.eta_a3VaB0;
+  const int &NR_plot = prm.NR_plot, &NZ_plot = prm.NZ_plot, &Nt_plot = prm.Nt_plot;
+  const Real &E_0 = prm.E_0;
 
   DualView3 Jre_mhd("Jre_mhd", NR, NZ, 3);
   Kokkos::deep_copy(Jre_mhd.view_device(), 0.0);
@@ -393,8 +314,9 @@ std::shared_ptr<StateDescriptor> Initialize(ParameterInput *pin, User* mhd_conte
   pkg->AddParam("Rc", Rc, Params::Mutability::Restart);
   pkg->AddParam("Zc", Zc, Params::Mutability::Restart);
 
-  const Real Rseed = pin->GetOrAddReal("ParticleSeed", "Rseed", Rc);  // Used in pgen if pparticles are generated at single point
-  const Real Zseed = pin->GetOrAddReal("ParticleSeed", "Zseed", Zc);
+  KineticLateParams late;
+  late.ParseSeedPoint(pin, Rc, Zc);
+  const Real &Rseed = late.Rseed, &Zseed = late.Zseed;
   pkg->AddParam("Rseed", Rseed, Params::Mutability::Restart);
   pkg->AddParam("Zseed", Zseed, Params::Mutability::Restart);
 
@@ -440,38 +362,36 @@ std::shared_ptr<StateDescriptor> Initialize(ParameterInput *pin, User* mhd_conte
   pkg->AddParam("Hermite_Field_Plot_data_F", hpd_F);
  // pkg->AddParam("GCE_data", gce_data);
 
-  const Real wce0 = pc::qe * B0 / pc::me; // Electron gyrofrequency
-  const Real c_aw0 =  pin->GetOrAddReal("GuidingCenterEquations", "c_aw0", pc::c/a/wce0);
-  const Real ct_a =   pin->GetOrAddReal("GuidingCenterEquations", "ct_a", pc::c * tau_c / a);
-  const Real alpha0 = pin->GetOrAddReal("GuidingCenterEquations", "alpha0", tau_c/tau_a);
+  late.ParseParticles(pin, prm);
+  const Real &c_aw0 = late.c_aw0, &ct_a = late.ct_a, &alpha0 = late.alpha0;
 
   pkg->AddParam("c_aw0", c_aw0);
   pkg->AddParam("ct_a", ct_a);
   pkg->AddParam("alpha0", alpha0);
 
-  int npart =  pin->GetOrAddInteger("ParticleSeed", "num_particles_per_block", 16);
+  const int npart = late.npart;
   pkg->AddParam("num_particles_per_block", npart);
 
 // Paticles are counted on Collect current
   pkg->AddParam("num_particles_total", 0, Params::Mutability::Restart);
-  const int num_particles_max = pin->GetOrAddInteger("ParticleSeed", "MaxParticles", 500000);
+  const int num_particles_max = late.num_particles_max;
 
   pkg->AddParam("num_particles_max", num_particles_max);
   // Initialize random number generator pool
-  int rng_seed = pin->GetOrAddInteger("ParticleSeed", "rng_seed", 1234) + Globals::my_rank;
+  const int rng_seed = late.rng_seed;
   RNGPool rng_pool(rng_seed);
   pkg->AddParam("rng_pool", rng_pool);
 
-  const Real seed_current = pin->GetOrAddReal("ParticleSeed", "current", 15e3); // 15 kAmps
+  const Real seed_current = late.seed_current; // 15 kAmps by default
   pkg->AddParam("seed_current", seed_current * a); // Convert from amps
 
-  const Real gammamin = pin->GetOrAddReal("ParticleSeed", "gammamin", 10.0);
+  const Real gammamin = late.gammamin;
   pkg->AddParam("pmin", momentum_(gammamin));
-  const Real gammamax = pin->GetOrAddReal("ParticleSeed", "gammamax", 20.0);
+  const Real gammamax = late.gammamax;
   pkg->AddParam("pmax", momentum_(gammamax));
-  const Real ximin = pin->GetOrAddReal("ParticleSeed", "ximin", 0.8);
+  const Real ximin = late.ximin;
   pkg->AddParam("ximin", ximin);
-  const Real ximax = pin->GetOrAddReal("ParticleSeed", "ximax", 1.0);
+  const Real ximax = late.ximax;
   pkg->AddParam("ximax", ximax);
 
   if (Globals::my_rank == 0) {
@@ -518,17 +438,17 @@ std::shared_ptr<StateDescriptor> Initialize(ParameterInput *pin, User* mhd_conte
 
 
 
-  int EnableLargeAngleCollisions = pin->GetOrAddInteger("Simulation", "EnableLargeAngleCollisions", 1);
-  int EnableSmallAngleCollisions = pin->GetOrAddInteger("Simulation", "EnableSmallAngleCollisions", 1);
-  int EnableComputeConservedQuantities = pin->GetOrAddInteger("Simulation", "EnableComputeConservedQuantities", 0);
+  const KineticSwitches sw = KineticSwitches::FromInput(pin);
+  const int &EnableLargeAngleCollisions = sw.EnableLargeAngleCollisions;
+  const int &EnableSmallAngleCollisions = sw.EnableSmallAngleCollisions;
+  const int &EnableComputeConservedQuantities = sw.EnableComputeConservedQuantities;
 
   pkg->AddParam("EnableLargeAngleCollisions",      EnableLargeAngleCollisions);
   pkg->AddParam("EnableSmallAngleCollisions",      EnableSmallAngleCollisions);
   pkg->AddParam("EnableComputeConservedQuantities",EnableComputeConservedQuantities);
 
   // Log file for the weight-averaged conservation diagnostic (p_phi, mu).
-  const std::string conservation_log =
-      pin->GetOrAddString("Simulation", "conservation_log", "conservation.dat");
+  const std::string &conservation_log = sw.conservation_log;
   pkg->AddParam("conservation_log", conservation_log);
   if (EnableComputeConservedQuantities == 1 && Globals::my_rank == 0) {
     std::ofstream(conservation_log);  // truncate at start of run

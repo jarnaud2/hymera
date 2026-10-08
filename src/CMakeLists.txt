@@ -32,6 +32,7 @@ target_include_directories(mhd_core PUBLIC
 
 add_library(infrastructure
   kinetic/kinetic.cpp
+  kinetic/KineticParams.cpp
   tasks/BackgroundFields.cpp
   tasks/ComputeElectricField.cpp
   tasks/Interpolate.cpp
