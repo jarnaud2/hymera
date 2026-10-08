@@ -24,23 +24,80 @@ using namespace parthenon::package::prelude;
 #include "util/common.hpp"
 
 
+namespace {
+
+// Interior cell geometry of one mesh block.
+struct BlockCells {
+  int nx_i, nx_j, nx_k;
+  Real dx_i, dx_j, dx_k;
+  Real minx_i, minx_j, minx_k;
+
+  explicit BlockCells(parthenon::MeshBlock *pmb) {
+    const IndexRange &ib = pmb->cellbounds.GetBoundsI(IndexDomain::interior);
+    const IndexRange &jb = pmb->cellbounds.GetBoundsJ(IndexDomain::interior);
+    const IndexRange &kb = pmb->cellbounds.GetBoundsK(IndexDomain::interior);
+    nx_i = pmb->cellbounds.ncellsi(IndexDomain::interior);
+    nx_j = pmb->cellbounds.ncellsj(IndexDomain::interior);
+    nx_k = pmb->cellbounds.ncellsk(IndexDomain::interior);
+    dx_i = pmb->coords.Dxf<1>(ib.s);
+    dx_j = pmb->coords.Dxf<2>(jb.s);
+    dx_k = pmb->coords.Dxf<3>(kb.s);
+    minx_i = pmb->coords.Xf<1>(ib.s);
+    minx_j = pmb->coords.Xf<2>(jb.s);
+    minx_k = pmb->coords.Xf<3>(kb.s);
+  }
+};
+
+// Sets the mesh position (swarm x, y, z) of new particle n: the centre of cell
+// n mod (cells in the block). The mesh only load-balances particles; their
+// physical position is (R, phi, Z). This is the one place a new particle's mesh
+// position is chosen, so mapping momentum onto the mesh coordinate replaces it.
+template <typename Pack>
+KOKKOS_INLINE_FUNCTION void PlaceInCell(const Pack &pack, const int b, const int n,
+                                        const BlockCells &c) {
+  int ind = n % (c.nx_i * c.nx_j * c.nx_k);
+
+  int x_i = ind % c.nx_i;
+  ind /= c.nx_i;
+  int x_j = ind % c.nx_j;
+  ind /= c.nx_j; int x_k = ind;
+
+  pack(b, swarm_position::x(), n) = c.minx_i + (x_i+0.5) * c.dx_i;
+  pack(b, swarm_position::y(), n) = c.minx_j + (x_j+0.5) * c.dx_j;
+  pack(b, swarm_position::z(), n) = c.minx_k + (x_k+0.5) * c.dx_k;
+}
+
+// Seeding parameters shared by the generators, from the Deck package.
+struct SeedParams {
+  Kinetic::RNGPool rng_pool;
+  int N;                        ///< particles per block
+  Real pmin, pmax, ximin, ximax;
+  Real Rmin, Rmax, Zmin, Zmax;
+  Real Rc, Zc;                  ///< magnetic axis
+
+  explicit SeedParams(const std::shared_ptr<StateDescriptor> &pkg)
+      : rng_pool(pkg->Param<Kinetic::RNGPool>("rng_pool")),
+        N(pkg->Param<int>("num_particles_per_block")),
+        pmin(pkg->Param<Real>("pmin")), pmax(pkg->Param<Real>("pmax")),
+        ximin(pkg->Param<Real>("ximin")), ximax(pkg->Param<Real>("ximax")),
+        Rmin(pkg->Param<Real>("Rmin")), Rmax(pkg->Param<Real>("Rmax")),
+        Zmin(pkg->Param<Real>("Zmin")), Zmax(pkg->Param<Real>("Zmax")),
+        Rc(pkg->Param<Real>("Rc")), Zc(pkg->Param<Real>("Zc")) {}
+};
+
+} // namespace
+
 void GenerateParticleCurrentDensity(parthenon::MeshBlock *pmb, parthenon::ParameterInput *pin) {
   auto &data = pmb->meshblock_data.Get();
 
   // pull out information/global params from package
   auto pkg = pmb->packages.Get("Deck");
-  auto rng_pool = pkg->Param<Kinetic::RNGPool>("rng_pool");
-  int N = pkg->Param<int>("num_particles_per_block");
-  const Real pmin  = pkg->Param<Real>("pmin");
-  const Real pmax  = pkg->Param<Real>("pmax");
-  const Real ximin = pkg->Param<Real>("ximin");
-  const Real ximax = pkg->Param<Real>("ximax");
-  const Real Rmin  = pkg->Param<Real>("Rmin");
-  const Real Rmax  = pkg->Param<Real>("Rmax");
-  const Real Zmin  = pkg->Param<Real>("Zmin");
-  const Real Zmax  = pkg->Param<Real>("Zmax");
-  const Real Rc  = pkg->Param<Real>("Rc");
-  const Real Zc  = pkg->Param<Real>("Zc");
+  const SeedParams sp(pkg);
+  auto rng_pool = sp.rng_pool;
+  const int N = sp.N;
+  const Real pmin = sp.pmin, pmax = sp.pmax, ximin = sp.ximin, ximax = sp.ximax;
+  const Real Rmin = sp.Rmin, Rmax = sp.Rmax, Zmin = sp.Zmin, Zmax = sp.Zmax;
+  const Real Rc = sp.Rc, Zc = sp.Zc;
 
   auto field_data = pkg->Param<Kinetic::FieldData_t>("FieldData");
   const auto cdg = pkg->Param<ConfigurationDomainGeometry>("CDG");
@@ -61,18 +118,7 @@ void GenerateParticleCurrentDensity(parthenon::MeshBlock *pmb, parthenon::Parame
   auto swarm = data->GetSwarmData()->Get("particles");
 
   // Meshblock geometry
-  const IndexRange &ib = pmb->cellbounds.GetBoundsI(IndexDomain::interior);
-  const IndexRange &jb = pmb->cellbounds.GetBoundsJ(IndexDomain::interior);
-  const IndexRange &kb = pmb->cellbounds.GetBoundsK(IndexDomain::interior);
-  const int &nx_i = pmb->cellbounds.ncellsi(IndexDomain::interior);
-  const int &nx_j = pmb->cellbounds.ncellsj(IndexDomain::interior);
-  const int &nx_k = pmb->cellbounds.ncellsk(IndexDomain::interior);
-  const Real &dx_i = pmb->coords.Dxf<1>(ib.s);
-  const Real &dx_j = pmb->coords.Dxf<2>(jb.s);
-  const Real &dx_k = pmb->coords.Dxf<3>(kb.s);
-  const Real &minx_i = pmb->coords.Xf<1>(ib.s);
-  const Real &minx_j = pmb->coords.Xf<2>(jb.s);
-  const Real &minx_k = pmb->coords.Xf<3>(kb.s);
+  const BlockCells cells(pmb);
 
   auto newParticlesContext = swarm->AddEmptyParticles(N);
 
@@ -123,26 +169,10 @@ void GenerateParticleCurrentDensity(parthenon::MeshBlock *pmb, parthenon::Parame
       // this is the particle index inside the swarm
       const int n = newParticlesContext.GetNewParticleIndex(new_n);
 
-      // Normally b would be free-floating and set by pack.GetBlockparticleIndices
-      // but since we're on a single meshblock for this loop, it's just 0
-      // because block index = 0
+      // The pack spans this one mesh block, so the block index is 0.
       const int b = 0;
-      //auto [b, n] = pack_swarm.GetBlockparticleIndices(idx);
 
-      // Find the cell index in 1D
-      int ind = n % (nx_i * nx_j * nx_k);
-
-      int x_i = ind % nx_i;
-      ind /= nx_i;
-      int x_j = ind % nx_j;
-      ind /= nx_j; int x_k = ind;
-
-      pack_swarm(b, swarm_position::x(), n) = minx_i + (x_i+0.5) * dx_i;
-      pack_swarm(b, swarm_position::y(), n) = minx_j + (x_j+0.5) * dx_j;
-      pack_swarm(b, swarm_position::z(), n) = minx_k + (x_k+0.5) * dx_k;
-      pack_swarm(b, Kinetic::R(), n) = Rc;
-      pack_swarm(b, Kinetic::Z(), n) = Zc;
-      // randomly sample particle positions
+      PlaceInCell(pack_swarm, b, n, cells);
 
       Dim5 X;
       Real t = 0.0;
@@ -204,40 +234,23 @@ void GenerateParticlePoint(parthenon::MeshBlock *pmb, parthenon::ParameterInput 
 
   // pull out information/global params from package
   auto pkg = pmb->packages.Get("Deck");
-  auto rng_pool = pkg->Param<Kinetic::RNGPool>("rng_pool");
-  int N = pkg->Param<int>("num_particles_per_block");
-  const Real pmin  = pkg->Param<Real>("pmin");
-  const Real pmax  = pkg->Param<Real>("pmax");
-  const Real ximin = pkg->Param<Real>("ximin");
-  const Real ximax = pkg->Param<Real>("ximax");
-  const Real Rmin  = pkg->Param<Real>("Rmin");
-  const Real Rmax  = pkg->Param<Real>("Rmax");
-  const Real Zmin  = pkg->Param<Real>("Zmin");
-  const Real Zmax  = pkg->Param<Real>("Zmax");
-  const Real Rc  = pkg->Param<Real>("Rc");
-  const Real Zc  = pkg->Param<Real>("Zc");
+  const SeedParams sp(pkg);
+  auto rng_pool = sp.rng_pool;
+  const int N = sp.N;
+  const Real pmin = sp.pmin, pmax = sp.pmax, ximin = sp.ximin, ximax = sp.ximax;
   const Real Rseed  = pkg->Param<Real>("Rseed");
   const Real Zseed  = pkg->Param<Real>("Zseed");
 
-  const Real r_0 = pin->GetOrAddReal("ParticleSeed", "r_0", 0.0);
+  // Not used here; read so that run scripts passing ParticleSeed/r_0 keep working
+  // and the parameter dump keeps recording it.
+  [[maybe_unused]] const Real r_0 = pin->GetOrAddReal("ParticleSeed", "r_0", 0.0);
 
 
   // Pull out swarm object
   auto swarm = data->GetSwarmData()->Get("particles");
 
   // Meshblock geometry
-  const IndexRange &ib = pmb->cellbounds.GetBoundsI(IndexDomain::interior);
-  const IndexRange &jb = pmb->cellbounds.GetBoundsJ(IndexDomain::interior);
-  const IndexRange &kb = pmb->cellbounds.GetBoundsK(IndexDomain::interior);
-  const int &nx_i = pmb->cellbounds.ncellsi(IndexDomain::interior);
-  const int &nx_j = pmb->cellbounds.ncellsj(IndexDomain::interior);
-  const int &nx_k = pmb->cellbounds.ncellsk(IndexDomain::interior);
-  const Real &dx_i = pmb->coords.Dxf<1>(ib.s);
-  const Real &dx_j = pmb->coords.Dxf<2>(jb.s);
-  const Real &dx_k = pmb->coords.Dxf<3>(kb.s);
-  const Real &minx_i = pmb->coords.Xf<1>(ib.s);
-  const Real &minx_j = pmb->coords.Xf<2>(jb.s);
-  const Real &minx_k = pmb->coords.Xf<3>(kb.s);
+  const BlockCells cells(pmb);
 
   auto newParticlesContext = swarm->AddEmptyParticles(N);
 
@@ -273,26 +286,10 @@ void GenerateParticlePoint(parthenon::MeshBlock *pmb, parthenon::ParameterInput 
       // this is the particle index inside the swarm
       const int n = newParticlesContext.GetNewParticleIndex(new_n);
 
-      // Normally b would be free-floating and set by pack.GetBlockparticleIndices
-      // but since we're on a single meshblock for this loop, it's just 0
-      // because block index = 0
+      // The pack spans this one mesh block, so the block index is 0.
       const int b = 0;
-      //auto [b, n] = pack_swarm.GetBlockparticleIndices(idx);
 
-      // Find the cell index in 1D
-      int ind = n % (nx_i * nx_j * nx_k);
-
-      int x_i = ind % nx_i;
-      ind /= nx_i;
-      int x_j = ind % nx_j;
-      ind /= nx_j; int x_k = ind;
-
-      pack_swarm(b, swarm_position::x(), n) = minx_i + (x_i+0.5) * dx_i;
-      pack_swarm(b, swarm_position::y(), n) = minx_j + (x_j+0.5) * dx_j;
-      pack_swarm(b, swarm_position::z(), n) = minx_k + (x_k+0.5) * dx_k;
-      pack_swarm(b, Kinetic::R(), n) = Rc;
-      pack_swarm(b, Kinetic::Z(), n) = Zc;
-      // randomly sample particle positions
+      PlaceInCell(pack_swarm, b, n, cells);
 
       Dim5 X;
 
