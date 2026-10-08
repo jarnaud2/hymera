@@ -11,6 +11,7 @@
 #include "HybridDriver.h"
 #include "pgen.hpp"
 #include "kinetic.hpp"
+#include "AppSetup.hpp"
 #include "mhd.h"
 
 using namespace parthenon;
@@ -21,24 +22,9 @@ int main(int argc, char *argv[]) {
   User * p_mhd_config;
 
   ParthenonManager pman;
-  auto manager_status = pman.ParthenonInitEnv(argc, argv);
+  if (auto rc = Kinetic::InitApp(pman, argc, argv, &p_mhd_config)) return *rc;
 
-  MHD_CHECK(mhd_PetscInit(&argc, &argv, &p_mhd_config));
-
-  if (manager_status == ParthenonStatus::complete) {
-    pman.ParthenonFinalize();
-    return 0;
-  }
-  if (manager_status == ParthenonStatus::error) {
-    pman.ParthenonFinalize();
-    return 1;
-  }
-
-  pman.app_input->ProcessPackages = [=](std::unique_ptr<ParameterInput> &pin) {
-    Packages_t packages;
-    packages.Add(Kinetic::Initialize(pin.get(), p_mhd_config));
-    return packages;
-  };
+  Kinetic::RegisterKineticPackage(pman, p_mhd_config);
   pman.app_input->ProblemGenerator = GenerateParticleCurrentDensity;
   pman.app_input->UserWorkBeforeLoop = [=](Mesh * pm, ParameterInput * pin, SimTime const & tm) {
     Kinetic::WorkBeforeLoop(pm, p_mhd_config);

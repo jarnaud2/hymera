@@ -11,6 +11,7 @@
 #include "ConservationDriver.h"
 #include "pgen.hpp"
 #include "kinetic.hpp"
+#include "AppSetup.hpp"
 
 using namespace parthenon;
 using namespace parthenon::driver::prelude;
@@ -19,27 +20,13 @@ using namespace parthenon::driver::prelude;
 int main(int argc, char *argv[]) {
 
   ParthenonManager pman;
-  auto manager_status = pman.ParthenonInitEnv(argc, argv);
+  if (auto rc = Kinetic::InitApp(pman, argc, argv)) return *rc;
 
-  if (manager_status == ParthenonStatus::complete) {
-    pman.ParthenonFinalize();
-    return 0;
-  }
-  if (manager_status == ParthenonStatus::error) {
-    pman.ParthenonFinalize();
-    return 1;
-  }
-
-  pman.app_input->ProcessPackages = [=](std::unique_ptr<ParameterInput> &pin) {
-    Packages_t packages;
-    packages.Add(Kinetic::Initialize(pin.get(), NULL));
-    return packages;
-  };
+  Kinetic::RegisterKineticPackage(pman, nullptr);
   pman.app_input->ProblemGenerator = GenerateParticlePoint;
 
   pman.app_input->UserWorkBeforeLoop = [=](Mesh * pm, ParameterInput * pin, SimTime const & tm) {
-    const std::string load_fields = pin->GetOrAddString("Simulation", "load_fields", "fields.h5");
-    Kinetic::LoadRawFieldData(pm, load_fields.c_str());
+    Kinetic::LoadFieldsFromInput(pm, pin);
     Kinetic::HijackEField(pm);
   };
 

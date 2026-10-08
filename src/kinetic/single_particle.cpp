@@ -32,6 +32,7 @@
 #include <Kokkos_Core.hpp>
 #include "SingleParticleDriver.h"
 #include "kinetic.hpp"
+#include "AppSetup.hpp"
 
 using namespace parthenon;
 using namespace parthenon::driver::prelude;
@@ -39,26 +40,13 @@ using namespace parthenon::driver::prelude;
 int main(int argc, char *argv[]) {
 
   ParthenonManager pman;
-  auto manager_status = pman.ParthenonInitEnv(argc, argv);
-
-  if (manager_status == ParthenonStatus::complete) {
-    pman.ParthenonFinalize();
-    return 0;
-  }
-  if (manager_status == ParthenonStatus::error) {
-    pman.ParthenonFinalize();
-    return 1;
-  }
+  if (auto rc = Kinetic::InitApp(pman, argc, argv)) return *rc;
 
   // Shared particle state, owned here so the driver and output hook see the
   // same object. Seeded from the <SingleParticle> input block.
   auto state = std::make_shared<Kinetic::SingleParticleState>();
 
-  pman.app_input->ProcessPackages = [=](std::unique_ptr<ParameterInput> &pin) {
-    Packages_t packages;
-    packages.Add(Kinetic::Initialize(pin.get(), NULL));
-    return packages;
-  };
+  Kinetic::RegisterKineticPackage(pman, nullptr);
 
   // Particle generation does nothing: the single particle is a host variable,
   // not a swarm particle.
@@ -78,9 +66,7 @@ int main(int argc, char *argv[]) {
         state->t = 0.0;
 
         // Load the pre-interpolated field grid (no MHD).
-        const std::string load_fields =
-            pin->GetOrAddString("Simulation", "load_fields", "fields.h5");
-        Kinetic::LoadRawFieldData(pm, load_fields.c_str());
+        Kinetic::LoadFieldsFromInput(pm, pin);
         Kinetic::HijackEField(pm);
 
         // Populate the initial conserved quantities and start the output file.

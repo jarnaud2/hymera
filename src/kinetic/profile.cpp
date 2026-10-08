@@ -30,6 +30,7 @@
 #include "ProfileDriver.h"
 #include "pgen.hpp"
 #include "kinetic.hpp"
+#include "AppSetup.hpp"
 #include "mhd.h"
 
 using namespace parthenon;
@@ -40,34 +41,19 @@ int main(int argc, char *argv[]) {
   User * p_mhd_config;
 
   ParthenonManager pman;
-  auto manager_status = pman.ParthenonInitEnv(argc, argv);
   // Petsc/MPI env init only -- we do NOT build or step the MHD solver.
-  MHD_CHECK(mhd_PetscInit(&argc, &argv, &p_mhd_config));
-
-  if (manager_status == ParthenonStatus::complete) {
-    pman.ParthenonFinalize();
-    return 0;
-  }
-  if (manager_status == ParthenonStatus::error) {
-    pman.ParthenonFinalize();
-    return 1;
-  }
+  if (auto rc = Kinetic::InitApp(pman, argc, argv, &p_mhd_config)) return *rc;
 
   // Pass nullptr as the MHD context: Kinetic::Initialize then skips the
   // MHD-driven field-fill pipeline and leaves the Hermite grid to be loaded.
-  pman.app_input->ProcessPackages = [=](std::unique_ptr<ParameterInput> &pin) {
-    Packages_t packages;
-    packages.Add(Kinetic::Initialize(pin.get(), nullptr));
-    return packages;
-  };
+  Kinetic::RegisterKineticPackage(pman, nullptr);
   // GenerateParticlePoint uses the "Deck" package and does not evaluate fields
   // at seed time (fields are loaded later, in UserWorkBeforeLoop).
   pman.app_input->ProblemGenerator = GenerateParticlePoint;
 
   // Load the pre-interpolated field grid before the push loop.
   pman.app_input->UserWorkBeforeLoop = [=](Mesh * pm, ParameterInput * pin, SimTime const & tm) {
-    const std::string load_fields = pin->GetOrAddString("Simulation", "load_fields", "fields.h5");
-    Kinetic::LoadRawFieldData(pm, load_fields.c_str());
+    Kinetic::LoadFieldsFromInput(pm, pin);
   };
 
   pman.ParthenonInitPackagesAndMesh();

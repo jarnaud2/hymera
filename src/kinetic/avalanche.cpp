@@ -11,6 +11,7 @@
 #include "AvalancheDriver.h"
 #include "pgen.hpp"
 #include "kinetic.hpp"
+#include "AppSetup.hpp"
 
 using namespace parthenon;
 using namespace parthenon::driver::prelude;
@@ -20,23 +21,9 @@ int main(int argc, char *argv[]) {
   User * p_mhd_config;
 
   ParthenonManager pman;
-  auto manager_status = pman.ParthenonInitEnv(argc, argv);
-  MHD_CHECK(mhd_PetscInit(&argc, &argv, &p_mhd_config));
+  if (auto rc = Kinetic::InitApp(pman, argc, argv, &p_mhd_config)) return *rc;
 
-  if (manager_status == ParthenonStatus::complete) {
-    pman.ParthenonFinalize();
-    return 0;
-  }
-  if (manager_status == ParthenonStatus::error) {
-    pman.ParthenonFinalize();
-    return 1;
-  }
-
-  pman.app_input->ProcessPackages = [=](std::unique_ptr<ParameterInput> &pin) {
-    Packages_t packages;
-    packages.Add(Kinetic::Initialize(pin.get(), p_mhd_config));
-    return packages;
-  };
+  Kinetic::RegisterKineticPackage(pman, p_mhd_config);
   pman.app_input->ProblemGenerator = GenerateParticlePoint;
 
   pman.app_input->UserMeshWorkBeforeOutput = [=](Mesh * pm, ParameterInput * pin, SimTime const & tm) {
