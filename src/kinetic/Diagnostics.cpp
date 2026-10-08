@@ -87,10 +87,12 @@ void RefreshFluxAndAxis(Mesh *pm) {
 }
 
 // Samples the interpolated fields on the Hermite_Field_Plot_* grid, for output.
+// With Output/plot_fields=0 the grid does not exist and only the psi refresh runs.
 void PlotFieldsTime(Mesh *pm, ParameterInput * pin, SimTime const & tm, User* mhd_context) {
   RefreshFluxAndAxis(pm);
 
   auto pkg = pm->packages.Get("Deck");
+  if (pkg->Param<int>("plot_fields") == 0) return;
 
   auto hpd_R = pkg->Param<ParArray1D<Real>>("Hermite_Field_Plot_data_R");
   auto hpd_Z = pkg->Param<ParArray1D<Real>>("Hermite_Field_Plot_data_Z");
@@ -136,6 +138,7 @@ void PlotFieldsTime(Mesh *pm, ParameterInput * pin, SimTime const & tm, User* mh
 
 void PlotGCETime(Mesh *pm, ParameterInput * pin, SimTime const & tm, User* mhd_context) {
   auto pkg = pm->packages.Get("Deck");
+  if (pkg->Param<int>("plot_fields") == 0) return;
 
   auto hpd_R = pkg->Param<ParArray1D<Real>>("Hermite_Field_Plot_data_R");
   auto hpd_Z = pkg->Param<ParArray1D<Real>>("Hermite_Field_Plot_data_Z");

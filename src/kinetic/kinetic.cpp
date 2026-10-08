@@ -333,35 +333,38 @@ std::shared_ptr<StateDescriptor> Initialize(ParameterInput *pin, User* mhd_conte
   }
 
 
-  const Real R0_plot = data.hermite_locator.R0 + 1e-10;
-  const Real Z0_plot = data.hermite_locator.Z0 + 1e-10;
-  const Real dR_plot = (data.hermite_locator.nR * data.hermite_locator.dR - 2e-10) / static_cast<Real> (NR_plot);
-  const Real dZ_plot = (data.hermite_locator.nZ * data.hermite_locator.dZ - 2e-10) / static_cast<Real> (NZ_plot);
-  const Real dt_plot = dt_mhd / tau_c / static_cast<Real> (Nt_plot-1);
+  pkg->AddParam("plot_fields", prm.plot_fields);
+  if (prm.plot_fields != 0) {
+    const Real R0_plot = data.hermite_locator.R0 + 1e-10;
+    const Real Z0_plot = data.hermite_locator.Z0 + 1e-10;
+    const Real dR_plot = (data.hermite_locator.nR * data.hermite_locator.dR - 2e-10) / static_cast<Real> (NR_plot);
+    const Real dZ_plot = (data.hermite_locator.nZ * data.hermite_locator.dZ - 2e-10) / static_cast<Real> (NZ_plot);
+    const Real dt_plot = dt_mhd / tau_c / static_cast<Real> (Nt_plot-1);
 
-  ParArray1D<Real> hpd_R("Hermite_Field_Plot_data_R", NR_plot);
-  ParArray1D<Real> hpd_t("Hermite_Field_Plot_data_t", Nt_plot);
-  ParArray1D<Real> hpd_Z("Hermite_Field_Plot_data_Z", NZ_plot);
-//  ParArrayND<Real> gce_data("GCE_data", NR_plot, NZ_plot, Nt_plot, 5);
-  ParArrayND<Real> hpd_F("Hermite_Field_Plot_data_F", NR_plot, NZ_plot, Nt_plot, 3, 7);
+    ParArray1D<Real> hpd_R("Hermite_Field_Plot_data_R", NR_plot);
+    ParArray1D<Real> hpd_t("Hermite_Field_Plot_data_t", Nt_plot);
+    ParArray1D<Real> hpd_Z("Hermite_Field_Plot_data_Z", NZ_plot);
+    //  ParArrayND<Real> gce_data("GCE_data", NR_plot, NZ_plot, Nt_plot, 5);
+    ParArrayND<Real> hpd_F("Hermite_Field_Plot_data_F", NR_plot, NZ_plot, Nt_plot, 3, 7);
 
-  Kokkos::parallel_for("FillGrids_R", NR_plot,
-      KOKKOS_LAMBDA(const int n) {
-        hpd_R(n) = R0_plot + n * dR_plot;
-      });
-  Kokkos::parallel_for("FillGrids_Z", NZ_plot,
-      KOKKOS_LAMBDA(const int n) {
-        hpd_Z(n) = Z0_plot + n * dZ_plot;
-      });
-  Kokkos::parallel_for("FillGrids_t", Nt_plot,
-      KOKKOS_LAMBDA(const int n) {
-        hpd_t(n) = n * dt_plot;
-      });
+    Kokkos::parallel_for("FillGrids_R", NR_plot,
+        KOKKOS_LAMBDA(const int n) {
+          hpd_R(n) = R0_plot + n * dR_plot;
+        });
+    Kokkos::parallel_for("FillGrids_Z", NZ_plot,
+        KOKKOS_LAMBDA(const int n) {
+          hpd_Z(n) = Z0_plot + n * dZ_plot;
+        });
+    Kokkos::parallel_for("FillGrids_t", Nt_plot,
+        KOKKOS_LAMBDA(const int n) {
+          hpd_t(n) = n * dt_plot;
+        });
 
-  pkg->AddParam("Hermite_Field_Plot_data_R", hpd_R);
-  pkg->AddParam("Hermite_Field_Plot_data_Z", hpd_Z);
-  pkg->AddParam("Hermite_Field_Plot_data_t", hpd_t);
-  pkg->AddParam("Hermite_Field_Plot_data_F", hpd_F);
+    pkg->AddParam("Hermite_Field_Plot_data_R", hpd_R);
+    pkg->AddParam("Hermite_Field_Plot_data_Z", hpd_Z);
+    pkg->AddParam("Hermite_Field_Plot_data_t", hpd_t);
+    pkg->AddParam("Hermite_Field_Plot_data_F", hpd_F);
+  }
  // pkg->AddParam("GCE_data", gce_data);
 
   late.ParseParticles(pin, prm);

@@ -142,9 +142,12 @@ KineticParams KineticParams::FromInput(ParameterInput *pin) {
   p.eta_a3VaB0 = p.etaplasma / pow(a,3) / p.E0; // converts eta J to V_A B_0
 
   // Create plotting mesh for interpolated fields
-  p.NR_plot = pin->GetOrAddInteger("Output", "NR_plot", 400);
-  p.NZ_plot = pin->GetOrAddInteger("Output", "NZ_plot", 800);
-  p.Nt_plot = pin->GetOrAddInteger("Output", "Nt_plot", 10);
+  // Diagnostics only. The grid is a Deck param, so every output file carries it:
+  // keep it small, or turn it off with Output/plot_fields=0.
+  p.plot_fields = pin->GetOrAddInteger("Output", "plot_fields", 1);
+  p.NR_plot = pin->GetOrAddInteger("Output", "NR_plot", 10);
+  p.NZ_plot = pin->GetOrAddInteger("Output", "NZ_plot", 20);
+  p.Nt_plot = pin->GetOrAddInteger("Output", "Nt_plot", 3);
 
   // The max |E_par| search used to sample the field-plot grid; its defaults
   // keep that resolution, so the momentum boundary does not depend on Output/*.
