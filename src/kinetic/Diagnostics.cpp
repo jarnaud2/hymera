@@ -46,19 +46,13 @@ using pc = PhysicalConstants<SI>;
 
 namespace Kinetic {
 
-void PlotFieldsTime(Mesh *pm, ParameterInput * pin, SimTime const & tm, User* mhd_context) {
+// Recomputes the flux psi from the current Hermite field grid, finds the
+// magnetic axis again and shifts psi so that it is zero there. The particle push
+// reads psi_data (conserved quantities), so this is physics, not diagnostics:
+// it runs before every output whether or not the field plot is written.
+void RefreshFluxAndAxis(Mesh *pm) {
   auto pkg = pm->packages.Get("Deck");
-
-  auto hpd_R = pkg->Param<ParArray1D<Real>>("Hermite_Field_Plot_data_R");
-  auto hpd_Z = pkg->Param<ParArray1D<Real>>("Hermite_Field_Plot_data_Z");
-  auto hpd_t = pkg->Param<ParArray1D<Real>>("Hermite_Field_Plot_data_t");
-  auto hpd_F = pkg->Param<ParArrayND<Real>>("Hermite_Field_Plot_data_F");
   auto data = pkg->Param<FieldData_t>("FieldData");
-  auto cdg  = pkg->Param<ConfigurationDomainGeometry>("CDG");
-
-  const int NR_plot = hpd_R.size();
-  const int NZ_plot = hpd_Z.size();
-  const int Nt_plot = hpd_t.size();
 
   Interpolator<FIELD_SMOOTHNESS, FIELD_FD_STENSIL> itrp;
   itrp.computeFlux(data.hermite_locator,
@@ -90,7 +84,26 @@ void PlotFieldsTime(Mesh *pm, ParameterInput * pin, SimTime const & tm, User* mh
     data.psi_data.view_device()(0,0,i,j) -= Psi_min;
   });
   data.psi_data.modify_device();
+}
 
+// Samples the interpolated fields on the Hermite_Field_Plot_* grid, for output.
+void PlotFieldsTime(Mesh *pm, ParameterInput * pin, SimTime const & tm, User* mhd_context) {
+  RefreshFluxAndAxis(pm);
+
+  auto pkg = pm->packages.Get("Deck");
+
+  auto hpd_R = pkg->Param<ParArray1D<Real>>("Hermite_Field_Plot_data_R");
+  auto hpd_Z = pkg->Param<ParArray1D<Real>>("Hermite_Field_Plot_data_Z");
+  auto hpd_t = pkg->Param<ParArray1D<Real>>("Hermite_Field_Plot_data_t");
+  auto hpd_F = pkg->Param<ParArrayND<Real>>("Hermite_Field_Plot_data_F");
+  auto data = pkg->Param<FieldData_t>("FieldData");
+  auto cdg  = pkg->Param<ConfigurationDomainGeometry>("CDG");
+
+  const int NR_plot = hpd_R.size();
+  const int NZ_plot = hpd_Z.size();
+  const int Nt_plot = hpd_t.size();
+
+  Evaluator psi_ev{data.hermite_locator};
   FieldEvaluator f{cdg.hermite_locator, data.hermite_data.view_device()};
 
 

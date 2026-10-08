@@ -77,6 +77,7 @@ void SaveRawFieldData(Mesh * pm, const char* filename);
 void LoadRawFieldData(Mesh * pm, const char* filename);
 
 void WorkBeforeOutput(Mesh * pm, ParameterInput * pin, SimTime const & tm, User* mhd_context);
+void RefreshFluxAndAxis(Mesh * pm);
 void PlotFieldsTime(Mesh * pm, ParameterInput * pin, SimTime const & tm, User* mhd_context);
 void PlotGCETime(Mesh * pm, ParameterInput * pin, SimTime const & tm, User* mhd_context);
 void PlotCurrents(Mesh * pm, ParameterInput * pin, SimTime const & tm, User* mhd_context);
