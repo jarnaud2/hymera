@@ -146,6 +146,11 @@ KineticParams KineticParams::FromInput(ParameterInput *pin) {
   p.NZ_plot = pin->GetOrAddInteger("Output", "NZ_plot", 800);
   p.Nt_plot = pin->GetOrAddInteger("Output", "Nt_plot", 10);
 
+  // The max |E_par| search used to sample the field-plot grid; its defaults
+  // keep that resolution, so the momentum boundary does not depend on Output/*.
+  p.NR_maxE = pin->GetOrAddInteger("Numerical", "NR_maxE", 400);
+  p.NZ_maxE = pin->GetOrAddInteger("Numerical", "NZ_maxE", 800);
+
   // GetOrAddInteger: an E_0 given with a fractional part is truncated. Kept as is.
   p.E_0 = pin->GetOrAddInteger("AnalyticField", "E_0", 40.0);
 

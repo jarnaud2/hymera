@@ -80,6 +80,9 @@ struct KineticParams {
   // Field-plot grid.
   int NR_plot, NZ_plot, Nt_plot;
 
+  // Sample points for the max |E_par| search that sets the momentum boundary.
+  int NR_maxE, NZ_maxE;
+
   Real E_0;                     ///< AnalyticField/E_0
 
   /// Reads every parameter needed before the MHD context is filled.

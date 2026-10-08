@@ -180,6 +180,8 @@ std::shared_ptr<StateDescriptor> Initialize(ParameterInput *pin, User* mhd_conte
 
   pkg->AddParam("NR", NR);
   pkg->AddParam("NZ", NZ);
+  pkg->AddParam("NR_maxE", prm.NR_maxE);
+  pkg->AddParam("NZ_maxE", prm.NZ_maxE);
 
   pkg->AddParam("nCorrectorSteps",  nCorrectorSteps);
   pkg->AddParam("nCD",  nCD);
