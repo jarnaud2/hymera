@@ -43,141 +43,141 @@ using parthenon::constants::SI;
 using parthenon::constants::PhysicalConstants;
 using pc = PhysicalConstants<SI>;
 
+#include "kinetic/Setup.hpp"
+
 namespace Kinetic {
-std::shared_ptr<StateDescriptor> Initialize(ParameterInput *pin, User* mhd_context) {
+
+void SetupMHD(ParameterInput *pin, const KineticParams &prm, User *mhd_context,
+              DualView3 &Jre_mhd) {
   /// Physical constants the MHD context needs.
   static constexpr Real mi = pc::amu;    ///< Ion mass = atomic mass unit [kg]
   static constexpr Real mu0 = pc::mu0;   ///< Vacuum permeabulity [N / A^2]
 
-  // Read the deck and derive the normalisation (see KineticParams.hpp). The
-  // names below are the ones the rest of this function has always used.
-  const KineticParams prm = KineticParams::FromInput(pin);
-  Log::Configure(pin);
+  // Names bound to the run parameters, as Initialize has always used them.
   const Real &dt_mhd = prm.dt_mhd, &final_time = prm.final_time;
+  const Real &B0 = prm.B0, &a = prm.a, &nD0 = prm.nD0;
+  const Real &VA = prm.VA, &tauA = prm.tauA, &eta0 = prm.eta0, &eta = prm.eta, &Re = prm.Re;
+  const Real &etaplasma = prm.etaplasma, &etawall = prm.etawall, &etawallperp = prm.etawallperp;
+  const Real &etawallphi = prm.etawallphi, &etawallphi_isol_cell = prm.etawallphi_isol_cell;
+  const Real &etasepwal = prm.etasepwal, &etaVV = prm.etaVV, &etaout = prm.etaout;
+  const Real &Rmin = prm.Rmin, &Rmax = prm.Rmax, &Zmin = prm.Zmin, &Zmax = prm.Zmax;
+  const Real &dampV = prm.dampV, &itime = prm.itime;
+  const int &NR = prm.NR, &Nphi = prm.Nphi, &NZ = prm.NZ;
+  const Real &dR = prm.dR, &dZ = prm.dZ;
+
+  /// Initialize MHD context
+  mhd_context->mi                     = mi;
+  mhd_context->mu0                    = mu0;
+
+  mhd_context->density                = nD0;
+  mhd_context->B0                     = B0;
+  mhd_context->L0                     = a;
+  mhd_context->V_A                    = VA;
+  mhd_context->eta0                   = eta0;
+  mhd_context->eta                    = eta;
+  mhd_context->etawall                = etawall;
+  mhd_context->etaplasma              = etaplasma;
+  mhd_context->etawallperp            = etawallperp;
+  mhd_context->etawallphi             = etawallphi;
+  mhd_context->etawallphi_isol_cell   = etawallphi_isol_cell;
+  mhd_context->etasepwal              = etasepwal;
+  mhd_context->etaVV                  = etaVV;
+  mhd_context->etaout                 = etaout;
+  mhd_context->dampV                  = dampV;
+  mhd_context->rmin                   = Rmin * a;
+  mhd_context->rmax                   = Rmax * a;
+  mhd_context->phimin                 = 0.0;
+  mhd_context->phimax                 = 2.0 * M_PI;
+  mhd_context->zmin                   = Zmin * a;
+  mhd_context->zmax                   = Zmax * a;
+  mhd_context->dt                     = dt_mhd / tauA;
+  // Initial-condition selector, consumed in src/mhd/ts_functions.c.
+  //   9  = EFIT + Grad-Shafranov equilibrium from inputs/mhd/vec{psi,g}*.txt
+  //        (production; the only value used by physics runs)
+  //   1..8, 10..13 = manufactured analytic solutions with closed forms, used
+  //        by the regression harness to measure spatial convergence order.
+  //        These read none of the inputs/mhd/*.txt equilibrium data.
+  // Default stays 9 so production behaviour is unchanged.
+  mhd_context->ictype                 = pin->GetOrAddInteger("MHD_Config", "ictype", 9);
+  mhd_context->Nr                     = NR;
+  mhd_context->Nphi                   = Nphi;
+  mhd_context->Nz                     = NZ;
+  mhd_context->Re                     = Re;
+  mhd_context->itime                  = itime / tauA;
+  mhd_context->ftime                  = final_time / tauA;
+  mhd_context->phibtype               = pin->GetOrAddInteger("MHD_Config", "phibtype",  1);
+  mhd_context->dr                     = dR;
+  mhd_context->dphi                   = (mhd_context->phimax - mhd_context->phimin) / mhd_context->Nphi;
+  mhd_context->dz                     = dZ;
+  mhd_context->tstype                 = pin->GetOrAddInteger("MHD_Config", "tstype",  2);
+  mhd_context->jtype                  = pin->GetOrAddInteger("MHD_Config", "jtype",  2);
+  mhd_context->debug                  = pin->GetOrAddInteger("MHD_Config", "debug",  0);
+  mhd_context->dump                   = pin->GetOrAddInteger("MHD_Config", "dump",  0);
+  // Per-step diagnostics from Monitor: step norms, max|div B|, toroidal
+  // currents. Costs a nested linear solve per step, hence off by default.
+  // The regression harness turns this on and uses the output as its
+  // per-step fingerprint.
+  mhd_context->monitor                = pin->GetOrAddInteger("MHD_Config", "monitor",  0);
+  // Advective inertia n_i (V.grad)V in the production momentum residual.
+  // Off by default (it used to be multiplied by 0.0).
+  mhd_context->inertia                = pin->GetOrAddInteger("MHD_Config", "inertia",  0);
+  mhd_context->savecoords             = pin->GetOrAddInteger("MHD_Config", "savecoords",  0);
+  mhd_context->isB                    = NULL;
+  mhd_context->isEP                   = NULL;
+  mhd_context->istau                  = NULL;
+  mhd_context->isV                    = NULL;
+  mhd_context->isni                   = NULL;
+  mhd_context->isB_boundary           = NULL;
+  mhd_context->isE_boundary           = NULL;
+  mhd_context->isni_boundary          = NULL;
+
+  // Set default location for input data.
+  strcpy(mhd_context->input_folder, pin->GetOrAddString("MHD_Config", "input_folder", "../../inputs/mhd").c_str());
+  strcpy(mhd_context->ic_binary_path, pin->GetOrAddString("MHD_Config", "ic_binary_path", "").c_str());
+  mhd_context->ic_binary_mode = pin->GetOrAddInteger("MHD_Config", "ic_binary_load", 1) == 1 ? 'l' : 'c';
+
+  mhd_context->Ebc = 0;
+  mhd_context->tempdump = 0;
+  mhd_context->dumpfreq = std::ceil(mhd_context->ftime / (10.0 * mhd_context->dt));
+  mhd_context->testSpGD = 0;
+  mhd_context->testSpGDsamerhs = 0;
+  mhd_context->oldstep = 0;
+  mhd_context->n_record =0;
+  mhd_context->n_record_Steady_jRE = 0;
+
+  mhd_context -> jre = wrap_view(Jre_mhd.view_host());
+
+  MHD_CHECK(mhd_initialize(mhd_context));
+
+  /// Do single step before seeding particles
+  MHD_CHECK(mhd_step(mhd_context));
+}
+
+FieldGridResult SetupFieldGrid(ParameterInput *pin, const KineticParams &prm,
+                               User *mhd_context, DualView3 &Jre_mhd,
+                               std::shared_ptr<StateDescriptor> &pkg) {
+  // Names bound to the run parameters, as Initialize has always used them.
+  const Real &dt_mhd = prm.dt_mhd;
   const int &nCorrectorSteps = prm.nCorrectorSteps, &nCD = prm.nCD;
   const Real &dtLA_over_tauC = prm.dtLA_over_tauC;
   const Real &timeStep = prm.timeStep, &atol = prm.atol, &rtol = prm.rtol;
   const int &integrator = prm.integrator;
   const std::string &filePath = prm.filePath;
-  const Real &B0 = prm.B0, &a = prm.a, &nD0 = prm.nD0;
-  const Real &VA = prm.VA, &tauA = prm.tauA, &eta0 = prm.eta0, &eta = prm.eta, &Re = prm.Re;
   const Real &Z0 = prm.Z0, &ZI = prm.ZI, &fI = prm.fI, &Zeff = prm.Zeff, &NeI = prm.NeI;
   const Real &Coulog0 = prm.Coulog0;
   Real Rc = prm.Rc, Zc = prm.Zc;  // updated by the magnetic-axis search below
-  const Real &etaplasma = prm.etaplasma, &etawall = prm.etawall, &etawallperp = prm.etawallperp;
-  const Real &etawallphi = prm.etawallphi, &etawallphi_isol_cell = prm.etawallphi_isol_cell;
-  const Real &etasepwal = prm.etasepwal, &etaVV = prm.etaVV, &etaout = prm.etaout;
   const Real &Rmin = prm.Rmin, &Rmax = prm.Rmax, &Zmin = prm.Zmin, &Zmax = prm.Zmax;
   const Real &gamma_min = prm.gamma_min, &p_BC = prm.p_BC, &p_RE = prm.p_RE;
   const Real &c_vTe = prm.c_vTe;
   const int &NSA = prm.NSA;
   const Real &k = prm.k, &aI = prm.aI, &FineStructure = prm.FineStructure, &II = prm.II;
   const Real &PSCoefDnRA = prm.PSCoefDnRA;
-  const Real &dampV = prm.dampV, &itime = prm.itime;
-  const int &NR = prm.NR, &Nphi = prm.Nphi, &NZ = prm.NZ;
+  const int &NR = prm.NR, &NZ = prm.NZ;
   const Real &dR = prm.dR, &dZ = prm.dZ;
   const Real &RminCellCenter = prm.RminCellCenter, &ZminCellCenter = prm.ZminCellCenter;
-  const Real &tau_a = prm.tau_a, &tau_c = prm.tau_c, &En = prm.En;
+  const Real &tau_c = prm.tau_c, &En = prm.En;
   const Real &eta_norm = prm.eta_norm, &eta_a3VaB0 = prm.eta_a3VaB0;
-  const int &NR_plot = prm.NR_plot, &NZ_plot = prm.NZ_plot, &Nt_plot = prm.Nt_plot;
   const Real &E_0 = prm.E_0;
-
-  DualView3 Jre_mhd("Jre_mhd", NR, NZ, 3);
-  Kokkos::deep_copy(Jre_mhd.view_device(), 0.0);
-  Kokkos::deep_copy(Jre_mhd.view_host(), 0.0);
-
-  if (mhd_context != nullptr) {
-    /// Initialize MHD context
-    mhd_context->mi                     = mi;
-    mhd_context->mu0                    = mu0;
-
-    mhd_context->density                = nD0;
-    mhd_context->B0                     = B0;
-    mhd_context->L0                     = a;
-    mhd_context->V_A                    = VA;
-    mhd_context->eta0                   = eta0;
-    mhd_context->eta                    = eta;
-    mhd_context->etawall                = etawall;
-    mhd_context->etaplasma              = etaplasma;
-    mhd_context->etawallperp            = etawallperp;
-    mhd_context->etawallphi             = etawallphi;
-    mhd_context->etawallphi_isol_cell   = etawallphi_isol_cell;
-    mhd_context->etasepwal              = etasepwal;
-    mhd_context->etaVV                  = etaVV;
-    mhd_context->etaout                 = etaout;
-    mhd_context->dampV                  = dampV;
-    mhd_context->rmin                   = Rmin * a;
-    mhd_context->rmax                   = Rmax * a;
-    mhd_context->phimin                 = 0.0;
-    mhd_context->phimax                 = 2.0 * M_PI;
-    mhd_context->zmin                   = Zmin * a;
-    mhd_context->zmax                   = Zmax * a;;
-    mhd_context->dt                     = dt_mhd / tauA;
-    // Initial-condition selector, consumed in src/mhd/ts_functions.c.
-    //   9  = EFIT + Grad-Shafranov equilibrium from inputs/mhd/vec{psi,g}*.txt
-    //        (production; the only value used by physics runs)
-    //   1..8, 10..13 = manufactured analytic solutions with closed forms, used
-    //        by the regression harness to measure spatial convergence order.
-    //        These read none of the inputs/mhd/*.txt equilibrium data.
-    // Default stays 9 so production behaviour is unchanged.
-    mhd_context->ictype                 = pin->GetOrAddInteger("MHD_Config", "ictype", 9);
-    mhd_context->Nr                     = NR;
-    mhd_context->Nphi                   = Nphi;
-    mhd_context->Nz                     = NZ;
-    mhd_context->Re                     = Re;
-    mhd_context->itime                  = itime / tauA;
-    mhd_context->ftime                  = final_time / tauA;
-    mhd_context->phibtype               = pin->GetOrAddInteger("MHD_Config", "phibtype",  1);
-    mhd_context->dr                     = dR;
-    mhd_context->dphi                   = (mhd_context->phimax - mhd_context->phimin) / mhd_context->Nphi;
-    mhd_context->dz                     = dZ;
-    mhd_context->tstype                 = pin->GetOrAddInteger("MHD_Config", "tstype",  2);
-    mhd_context->jtype                  = pin->GetOrAddInteger("MHD_Config", "jtype",  2);
-    mhd_context->debug                  = pin->GetOrAddInteger("MHD_Config", "debug",  0);
-    mhd_context->dump                   = pin->GetOrAddInteger("MHD_Config", "dump",  0);
-    // Per-step diagnostics from Monitor: step norms, max|div B|, toroidal
-    // currents. Costs a nested linear solve per step, hence off by default.
-    // The regression harness turns this on and uses the output as its
-    // per-step fingerprint.
-    mhd_context->monitor                = pin->GetOrAddInteger("MHD_Config", "monitor",  0);
-    // Advective inertia n_i (V.grad)V in the production momentum residual.
-    // Off by default (it used to be multiplied by 0.0).
-    mhd_context->inertia                = pin->GetOrAddInteger("MHD_Config", "inertia",  0);
-    mhd_context->savecoords             = pin->GetOrAddInteger("MHD_Config", "savecoords",  0);
-    mhd_context->isB                    = NULL;
-    mhd_context->isEP                   = NULL;
-    mhd_context->istau                  = NULL;
-    mhd_context->isV                    = NULL;
-    mhd_context->isni                   = NULL;
-    mhd_context->isB_boundary           = NULL;
-    mhd_context->isE_boundary           = NULL;
-    mhd_context->isni_boundary          = NULL;
-
-
-    // Set default location for input data.
-    strcpy(mhd_context->input_folder, pin->GetOrAddString("MHD_Config", "input_folder", "../../inputs/mhd").c_str());
-    strcpy(mhd_context->ic_binary_path, pin->GetOrAddString("MHD_Config", "ic_binary_path", "").c_str());
-    mhd_context->ic_binary_mode = pin->GetOrAddInteger("MHD_Config", "ic_binary_load", 1) == 1 ? 'l' : 'c';
-
-    mhd_context->Ebc = 0;
-    mhd_context->tempdump = 0;
-    mhd_context->dumpfreq = std::ceil(mhd_context->ftime / (10.0 * mhd_context->dt));
-    mhd_context->testSpGD = 0;
-    mhd_context->testSpGDsamerhs = 0;
-    mhd_context->oldstep = 0;
-    mhd_context->n_record =0;
-    mhd_context->n_record_Steady_jRE = 0;
-
-    mhd_context -> jre = wrap_view(Jre_mhd.view_host());
-
-    MHD_CHECK(mhd_initialize(mhd_context));
-
-    /// Do single step before seeding particles
-    MHD_CHECK(mhd_step(mhd_context));
-
-  }
-
-  auto pkg = std::make_shared<StateDescriptor>("Deck");
 
   pkg->AddParam("E_0", E_0);
 
@@ -316,6 +316,20 @@ std::shared_ptr<StateDescriptor> Initialize(ParameterInput *pin, User* mhd_conte
     Log::Info("Magnetic axis (R, Z) = ({:g}, {:g}), Psi_min = {:g}", Rc, Zc, Psi_min);
   }
 
+  return {Rc, Zc, Psi_min};
+}
+
+void SetupParticles(ParameterInput *pin, const KineticParams &prm, User *mhd_context,
+                    const FieldGridResult &axis, std::shared_ptr<StateDescriptor> &pkg) {
+  // Names bound to the run parameters, as Initialize has always used them.
+  const Real &dt_mhd = prm.dt_mhd;
+  const Real &a = prm.a;
+  const Real &tau_c = prm.tau_c;
+  const int &NR_plot = prm.NR_plot, &NZ_plot = prm.NZ_plot, &Nt_plot = prm.Nt_plot;
+  const Real Rc = axis.Rc, Zc = axis.Zc;  // magnetic axis from SetupFieldGrid
+  const Real &Psi_min = axis.Psi_min;
+  auto data = pkg->Param<FieldData_t>("FieldData");
+
   pkg->AddParam("Rc", Rc, Params::Mutability::Restart);
   pkg->AddParam("Zc", Zc, Params::Mutability::Restart);
 
@@ -427,8 +441,15 @@ std::shared_ptr<StateDescriptor> Initialize(ParameterInput *pin, User* mhd_conte
 	  pkg->AddSwarmValue(p_phi::name(), "particles",real_swarmvalue_metadata);
     pkg->AddSwarmValue(mu::name(), "particles",real_swarmvalue_metadata);
   }
+}
 
-
+void SetupDiagnostics(ParameterInput *pin, const KineticParams &prm,
+                      std::shared_ptr<StateDescriptor> &pkg) {
+  // Names bound to the run parameters, as Initialize has always used them.
+  const Real &dtLA_over_tauC = prm.dtLA_over_tauC;
+  using SA = SmallAngleCollision<PartialScreening, EnergyScattering, ModifiedCouLog>;
+  auto sa = pkg->Param<SA>("SmallAngleCollision");
+  auto ms = pkg->Param<MollerSource>("MollerSource");
 
   const KineticSwitches sw = KineticSwitches::FromInput(pin);
   const int &EnableLargeAngleCollisions = sw.EnableLargeAngleCollisions;
@@ -490,11 +511,27 @@ std::shared_ptr<StateDescriptor> Initialize(ParameterInput *pin, User* mhd_conte
   pkg->AddParam("ComputeInitialWeights", 1, Params::Mutability::Restart);
   pkg->AddParam("MyTime", 0.0, Params::Mutability::Restart);
   pkg->AddParam("PredictorIterationNumber", 0, Params::Mutability::Restart);
+}
+
+std::shared_ptr<StateDescriptor> Initialize(ParameterInput *pin, User* mhd_context) {
+  // Read the deck and derive the normalisation (see KineticParams.hpp).
+  const KineticParams prm = KineticParams::FromInput(pin);
+  Log::Configure(pin);
+
+  DualView3 Jre_mhd("Jre_mhd", prm.NR, prm.NZ, 3);
+  Kokkos::deep_copy(Jre_mhd.view_device(), 0.0);
+  Kokkos::deep_copy(Jre_mhd.view_host(), 0.0);
+
+  if (mhd_context != nullptr) SetupMHD(pin, prm, mhd_context, Jre_mhd);
+
+  auto pkg = std::make_shared<StateDescriptor>("Deck");
+  const FieldGridResult axis = SetupFieldGrid(pin, prm, mhd_context, Jre_mhd, pkg);
+  SetupParticles(pin, prm, mhd_context, axis, pkg);
+  SetupDiagnostics(pin, prm, pkg);
 
   Log::Info("Kinetic package initialised");
 
   return pkg;
 }
-
 
 } // namespace Kinetic
