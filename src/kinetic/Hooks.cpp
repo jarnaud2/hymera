@@ -28,6 +28,7 @@ using namespace parthenon;
 #include "kinetic/RunawayDriver.h"
 #include "kinetic/kinetic.hpp"
 #include "kinetic/KineticParams.hpp"
+#include "kinetic/Log.hpp"
 #include "kinetic/GuidingCenterEquations.hpp"
 #include "kinetic/LargeAngleCollision.hpp"
 #include "kinetic/SmallAngleCollision.hpp"
@@ -81,7 +82,7 @@ void WorkBeforeRestartOutput(Mesh * pm, ParameterInput * pin, OutputParameters *
 
 void WorkBeforeLoop(Mesh * pm, User* mhd_context) {
   if (Globals::is_restart) {
-    if (Globals::my_rank == 0) std::cout << "WorkBeforeLoop: reading mhd restart\n";
+    Log::Info("Restart: reading MHD state from {}", pm->packages.Get("Deck")->Param<std::string>("mhd_restart_filename"));
     auto pkg = pm->packages.Get("Deck");
     auto filename = pkg -> Param<std::string>("mhd_restart_filename");
 
@@ -148,8 +149,6 @@ void ComputeParticleWeights(Mesh* pm) {
   auto pack_swarm_r = desc_swarm_r.GetPack(md.get());
   auto pack_swarm_i = desc_swarm_i.GetPack(md.get());
 
-  if (Globals::my_rank == 0)
-    std::cout << "Calculating current: \n";
 
   Kokkos::parallel_reduce(
       PARTHENON_AUTO_LABEL, pack_swarm_r.GetMaxFlatIndex() + 1,
@@ -179,8 +178,7 @@ void ComputeParticleWeights(Mesh* pm) {
 
   Real w = seed_current / I_re;
 
-  if (Globals::my_rank == 0)
-    std::cout << std::format("I_re = {:.8E}, w = {:.8E}\n", I_re, w) << std::endl;
+  Log::Info("Initial particle weights: runaway current of unit-weight particles {:.8E}, weight {:.8E}", I_re, w);
   parthenon::par_for(DEFAULT_LOOP_PATTERN, PARTHENON_AUTO_LABEL,
                      DevExecSpace(), 0, pack_swarm_r.GetMaxFlatIndex(),
                      // new_n ranges from 0 to N_new_particles

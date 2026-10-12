@@ -27,6 +27,7 @@ using namespace parthenon::driver::prelude;
 #include "kinetic/ConservationDriver.h"
 
 #include "kinetic/kinetic.hpp"
+#include "kinetic/Log.hpp"
 #include "kinetic/GuidingCenterEquations.hpp"
 #include "kinetic/AnalyticField.hpp"
 #include "kinetic/ParticleVerificator.hpp"
@@ -63,7 +64,7 @@ TaskCollection ConservationDriver::MakeTaskCollection(BlockList_t &blocks, SimTi
   Real dt = tm.dt / tau_c;
   Real dtCD = dt / nCDperMHDstep;
 
-  std::cout << "Creating task collection: " << std::format("dt = {:e}\n dtCD = {:e}\n dtLA = {:e}\n tau_c = {:e}\n", dt, dtCD, dtLA, tau_c);
+  Log::Debug("Task collection: dt = {:e}, dtCD = {:e}, dtLA = {:e} (tau_c = {:e} s)", dt, dtCD, dtLA, tau_c);
   dep = none;
 
   // Push-only sub-cycle: advance the particles then recompute the conserved

@@ -25,6 +25,7 @@ using namespace parthenon;
 #include "kinetic/RunawayDriver.h"
 #include "kinetic/kinetic.hpp"
 #include "kinetic/KineticParams.hpp"
+#include "kinetic/Log.hpp"
 #include "kinetic/GuidingCenterEquations.hpp"
 #include "kinetic/LargeAngleCollision.hpp"
 #include "kinetic/SmallAngleCollision.hpp"
@@ -50,6 +51,7 @@ std::shared_ptr<StateDescriptor> Initialize(ParameterInput *pin, User* mhd_conte
   // Read the deck and derive the normalisation (see KineticParams.hpp). The
   // names below are the ones the rest of this function has always used.
   const KineticParams prm = KineticParams::FromInput(pin);
+  Log::Configure(pin);
   const Real &dt_mhd = prm.dt_mhd, &final_time = prm.final_time;
   const int &nCorrectorSteps = prm.nCorrectorSteps, &nCD = prm.nCD;
   const Real &dtLA_over_tauC = prm.dtLA_over_tauC;
@@ -194,8 +196,8 @@ std::shared_ptr<StateDescriptor> Initialize(ParameterInput *pin, User* mhd_conte
   int nLA = std::ceil((dt_mhd / nCD) / (dtLA_over_tauC * tau_c));
   Real my_dtLA_over_tauC = (dt_mhd / nCD / tau_c) / nLA;
 
-  if(Globals::my_rank == 0) std::cout <<
-    std::format("Adjusting dtLA to evenly devide RE current deposition step:\n {:g} -> {:g} x {:g} sec\n", dtLA_over_tauC, my_dtLA_over_tauC, tau_c);
+  Log::Info("Large-angle step adjusted to divide the current-deposition step: {:g} -> {:g} tau_c ({} steps, tau_c = {:g} s)",
+            dtLA_over_tauC, my_dtLA_over_tauC, nLA, tau_c);
 
   pkg->AddParam("dtLA_over_tauC", my_dtLA_over_tauC);
   pkg->AddParam("nLA", nLA);
@@ -310,7 +312,7 @@ std::shared_ptr<StateDescriptor> Initialize(ParameterInput *pin, User* mhd_conte
                 accent,
                 Psi_min);
 
-    std::cout << std::format("New Mag. Axis center (R,Z) = {:g}, {:g}\n Psi_min = {:g}", Rc, Zc, Psi_min) << std::endl;
+    Log::Info("Magnetic axis (R, Z) = ({:g}, {:g}), Psi_min = {:g}", Rc, Zc, Psi_min);
   }
 
   pkg->AddParam("Rc", Rc, Params::Mutability::Restart);
@@ -469,7 +471,7 @@ std::shared_ptr<StateDescriptor> Initialize(ParameterInput *pin, User* mhd_conte
   pkg->AddParam("MyTime", 0.0, Params::Mutability::Restart);
   pkg->AddParam("PredictorIterationNumber", 0, Params::Mutability::Restart);
 
-  if (Globals::my_rank == 0) std::cout << "Init finished\n";
+  Log::Info("Kinetic package initialised");
 
   return pkg;
 }

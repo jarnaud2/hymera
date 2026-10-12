@@ -3,6 +3,7 @@
 #include <format>
 #include <globals.hpp>
 #include "kinetic/ParticleVerificator.hpp"
+#include "kinetic/Log.hpp"
 #include "kinetic/LargeAngleCollision.hpp"
 #include "kinetic/SmallAngleCollision.hpp"
 #include "kinetic/FieldEvaluator.hpp"
@@ -417,7 +418,6 @@ TaskStatus AddSecondaries(MeshBlock* pmb, const Real dtLA) {
 }
 
 TaskStatus RandomRemove(Mesh* pm) {
-  std::cout << "Random remove start" << std::endl;
   auto pkg = pm->packages.Get("Deck");
   int num_particles = 0;
 
@@ -439,7 +439,7 @@ TaskStatus RandomRemove(Mesh* pm) {
       num_particles);
   MPI_Allreduce(MPI_IN_PLACE,&num_particles,1,MPI_INT,MPI_SUM,MPI_COMM_WORLD);
 
-  std::cout << "Number of particles " << num_particles << std::endl;
+  Log::Debug("RandomRemove: {} alive particles", num_particles);
   auto num_particles_max = pkg->Param<int>("num_particles_max");
   if (num_particles_max > num_particles) return TaskStatus::complete;
 

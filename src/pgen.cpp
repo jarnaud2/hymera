@@ -22,6 +22,7 @@ using namespace parthenon::package::prelude;
 #include "kinetic/FieldEvaluator.hpp"
 #include "kinetic/CurrentDensity.hpp"
 #include "util/common.hpp"
+#include "kinetic/Log.hpp"
 
 
 namespace {
@@ -112,7 +113,7 @@ void GenerateParticleCurrentDensity(parthenon::MeshBlock *pmb, parthenon::Parame
   f_h.eval(ev_center, Rc, Zc, 0.0);
   Real Jc = ev_center.J[1];
 
-  std::cout << std::format("Current on magnetic axis center {:g}\n", Jc);
+  Kinetic::Log::Debug("Block {}: toroidal current density on the magnetic axis {:g}", pmb->gid, Jc);
 
   // Pull out swarm object
   auto swarm = data->GetSwarmData()->Get("particles");
@@ -145,18 +146,6 @@ void GenerateParticleCurrentDensity(parthenon::MeshBlock *pmb, parthenon::Parame
   auto pack_status = desc_markers.GetPack(data.get());
 
 
-  std::cout << "nR" << cdg.indicator_locator.nR << std::endl
-            << "nZ" << cdg.indicator_locator.nZ << std::endl
-            << "dR" << cdg.indicator_locator.dR << std::endl
-            << "dZ" << cdg.indicator_locator.dZ << std::endl
-            << "R0" << cdg.indicator_locator.R0 << std::endl
-            << "Z0" << cdg.indicator_locator.Z0 << std::endl;
-
-  int ir, iz;
-  cdg.indicator_locator.locateCell(3.0, 0.0, ir, iz);
-  std::cout << "F-Location of 3.0 0.0" << ir << " " << iz << std::endl;
-  cdg.hermite_locator.locateCell(3.0, 0.0, ir, iz);
-  std::cout << "H-Location of 3.0 0.0" << ir << " " << iz << std::endl;
 
 
   // loop over new particles created
@@ -228,8 +217,6 @@ void GenerateParticleCurrentDensity(parthenon::MeshBlock *pmb, parthenon::Parame
 
 void GenerateParticlePoint(parthenon::MeshBlock *pmb, parthenon::ParameterInput *pin) {
 
-  std::cout << "Started particle generation" << std::endl;
-
   auto &data = pmb->meshblock_data.Get();
 
   // pull out information/global params from package
@@ -275,7 +262,7 @@ void GenerateParticlePoint(parthenon::MeshBlock *pmb, parthenon::ParameterInput 
   auto pack_status = desc_markers.GetPack(data.get());
 
 
-  std::cout << std::format("Placing particles at ({},{})", Rseed, Zseed);
+  Kinetic::Log::Debug("Block {}: placing {} particles at (R, Z) = ({}, {})", pmb->gid, N, Rseed, Zseed);
 
   parthenon::par_for(DEFAULT_LOOP_PATTERN, PARTHENON_AUTO_LABEL,
       DevExecSpace(), 0,

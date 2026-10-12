@@ -28,6 +28,7 @@ using namespace parthenon;
 #include "kinetic/RunawayDriver.h"
 #include "kinetic/kinetic.hpp"
 #include "kinetic/KineticParams.hpp"
+#include "kinetic/Log.hpp"
 #include "kinetic/GuidingCenterEquations.hpp"
 #include "kinetic/LargeAngleCollision.hpp"
 #include "kinetic/SmallAngleCollision.hpp"
@@ -75,7 +76,7 @@ void RefreshFluxAndAxis(Mesh *pm) {
               accent,
               Psi_min);
 
-  std::cout << std::format("New Mag. Axis center (R,Z) = {:g}, {:g}\n Psi_min = {:g}", Rc, Zc, Psi_min) << std::endl;
+  Log::Debug("Magnetic axis (R, Z) = ({:g}, {:g}), Psi_min = {:g}", Rc, Zc, Psi_min);
 
   data.psi_data.sync_device();
   Kokkos::parallel_for("Normalize psi",

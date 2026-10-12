@@ -27,9 +27,7 @@ int main(int argc, char *argv[]) {
   pman.app_input->ProblemGenerator = GenerateParticlePoint;
 
   pman.app_input->UserMeshWorkBeforeOutput = [=](Mesh * pm, ParameterInput * pin, SimTime const & tm) {
-    if (Globals::my_rank == 0) std::cout << "Writing fields start";
     Kinetic::PlotFieldsTime(pm, pin, tm, p_mhd_config);
-    if (Globals::my_rank == 0) std::cout << "Writing fields finish";
   };
 
   pman.app_input->UserWorkBeforeLoop = [=](Mesh * pm, ParameterInput * pin, SimTime const & tm) {

@@ -27,6 +27,7 @@ using namespace parthenon::driver::prelude;
 #include "kinetic/AvalancheDriver.h"
 
 #include "kinetic/kinetic.hpp"
+#include "kinetic/Log.hpp"
 #include "kinetic/GuidingCenterEquations.hpp"
 #include "kinetic/LargeAngleCollision.hpp"
 #include "kinetic/SmallAngleCollision.hpp"
@@ -66,7 +67,7 @@ TaskCollection AvalancheDriver::MakeTaskCollection(BlockList_t &blocks, SimTime 
   Real dt = tm.dt / tau_c;
   Real dtCD = dt / nCDperMHDstep;
 
-  std::cout << "Creating task collection: " << std::format("dt = {:e}\n dtCD = {:e}\n dtLA = {:e}\n tau_c = {:e}\n", dt, dtCD, dtLA, tau_c);
+  Log::Debug("Task collection: dt = {:e}, dtCD = {:e}, dtLA = {:e} (tau_c = {:e} s)", dt, dtCD, dtLA, tau_c);
   dep = none;
 
   for (int iCD = 0; iCD < nCDperMHDstep; ++iCD) {

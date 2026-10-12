@@ -28,6 +28,7 @@ using namespace parthenon;
 #include "kinetic/RunawayDriver.h"
 #include "kinetic/kinetic.hpp"
 #include "kinetic/KineticParams.hpp"
+#include "kinetic/Log.hpp"
 #include "kinetic/GuidingCenterEquations.hpp"
 #include "kinetic/LargeAngleCollision.hpp"
 #include "kinetic/SmallAngleCollision.hpp"
@@ -102,7 +103,7 @@ void SaveRawFieldData(Mesh * pm, const char* filename) {
   H5::writeScalar(sgroup, "Rc", Rc);
   H5::writeScalar(sgroup, "Zc", Zc);
 
-  std::cout << std::format("Saved raw field data to {}\n", filename);
+  Log::Info("Saved raw field data to {}", filename);
 }
 
 // Element order of the indicator stored in a raw field file. Version-2 files
@@ -194,9 +195,7 @@ void LoadRawFieldData(Mesh * pm, const char* filename) {
   pkg->UpdateParam("Rc", Rc);
   pkg->UpdateParam("Zc", Zc);
 
-  if (Globals::my_rank == 0)
-    std::cout << std::format("Loaded raw field data from {}: Mag. Axis (R,Z) = {:g}, {:g}\n",
-        filename, Rc, Zc);
+  Log::Info("Loaded raw field data from {}: magnetic axis (R, Z) = ({:g}, {:g})", filename, Rc, Zc);
 }
 
 } // namespace Kinetic
