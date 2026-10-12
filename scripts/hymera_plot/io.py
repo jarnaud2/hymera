@@ -56,6 +56,18 @@ class Diagnostics:
             self.problem_id = f["meta"].attrs.get("problem_id", "")
             self.timeseries = {k: _read_group(f["timeseries"][k], k) for k in f.get("timeseries", {})}
             self.profiles = {k: _read_group(f["profiles"][k], k) for k in f.get("profiles", {})}
+            # In-step particle snapshots (Output/substep_snapshots): names only;
+            # load one with snapshot(name).
+            self.snapshot_names = sorted(f.get("snapshots", {}))
+
+    def snapshot(self, name):
+        """One in-step snapshot as a Snapshot (time = time within the step, tau_c)."""
+        with h5py.File(self.path, "r") as f:
+            g = f["snapshots"][name]
+            parts = {k: g[k][()] for k in g}
+            parts["status"] = parts["status"].astype(int)
+            return Snapshot(self.path, float(g.attrs["t_in_step_tau_c"]),
+                            int(g.attrs["cycle"]), parts, None, label=name)
 
     def __repr__(self):
         return (f"Diagnostics({self.path.name}: timeseries {sorted(self.timeseries)}, "
@@ -105,6 +117,7 @@ class Snapshot:
     cycle: int
     particles: dict[str, np.ndarray]
     field_grid: dict[str, np.ndarray] | None
+    label: str = ""
 
 
 FIELD_NAMES = ["B", "J", "dBdR", "dBdZ", "E", "dbdt"]

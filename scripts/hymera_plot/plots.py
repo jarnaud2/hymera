@@ -106,7 +106,9 @@ def phase_space(snapshots: list[io.Snapshot], out):
                              constrained_layout=True, squeeze=False)
     for ax, (h, pe, xe), (_, _, _, s) in zip(axes[0], hists, data):
         m = ax.pcolormesh(pe, xe, h.T, cmap=style.SEQUENTIAL_CMAP, vmin=0, vmax=vmax)
-        ax.set_title(f"cycle {s.cycle}, t = {s.time:.4g} s  ({int((h > 0).sum())} cells)", loc="left")
+        when = (f"{s.label}\nt in step = {s.time:.4g} tau_c" if s.label
+                else f"cycle {s.cycle}\nt = {s.time:.4g} s")
+        ax.set_title(f"{when}, {int((h > 0).sum())} occupied cells", loc="left", fontsize=9)
         ax.set_xlabel("p [m_e c]")
         ax.grid(False)
     axes[0][0].set_ylabel("pitch ξ")

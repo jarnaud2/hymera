@@ -49,6 +49,7 @@ Every column is a 1-D float64 dataset with a `units` attribute.
 | `/timeseries/conservation` | `t` [s], `p_phi_mean`, `mu_mean`, `weight_total` | after every large-angle sub-step, when `Simulation/EnableComputeConservedQuantities=1` | weight-averaged invariants of the alive particles |
 | `/timeseries/currents` | `t` [s], `I_re_particles`, `I_re_grid`, `I_ohmic` | before every output, in `hybrid` | runaway current as a particle sum and as the deposited-grid integral; Ohmic current from the Hermite field |
 | `/profiles/collision` | `p` [m_e c], `gamma`, `dtSA` [tau_c], `psi`, `CB`, `CF`, `CouLogee_ratio`, `probability` | once, at set-up | collision coefficients against momentum |
+| `/snapshots/c<cycle>_cd<iCD>_la<iLA>` | `p`, `xi`, `R`, `phi`, `Z`, `weight`, `status` of every alive particle; attributes `cycle`, `iCD`, `iLA`, `t_in_step_tau_c`, `n_particles` | every `Output/substep_snapshots`-th call of `MakeOutputs` | in-step state, see below |
 | `/meta` | attributes `problem_id`, `format` | at set-up | |
 
 `t` is the simulation time in seconds. The legacy `conservation.dat` time column
@@ -67,6 +68,22 @@ restart differ, because the random-number state is not part of the restart file.
 
 Read it with `scripts/hymera_plot` (`hymera_plot.io.find_diagnostics(run_dir)`) or
 any HDF5 reader.
+
+### In-step snapshots (`MakeOutputs`)
+
+`Kinetic::MakeOutputs(pmesh, cycle, iCD, iLA, t_in_step)` is a task a driver can
+put anywhere in its task list to record the particles in the middle of a time
+step. It gathers the alive particles of all ranks onto rank 0 and writes them as
+one `/snapshots/` group. It reads the particles and changes nothing; Parthenon's
+own outputs and their numbering are untouched.
+
+`Output/substep_snapshots=N` writes every Nth call (default 0: never). Only
+`ConservationDriver` adds the task, after each large-angle sub-step, and only
+when N > 0. To use it elsewhere, add the same `AddTask` line to that driver.
+Each snapshot holds 7 doubles per particle, so pick N with the particle count
+and the number of sub-steps (`nLA x nCD` per step) in mind.
+
+`hymera_plot phase-space` also plots the first and last snapshot.
 
 ### Legacy text files
 

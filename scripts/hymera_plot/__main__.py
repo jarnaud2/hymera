@@ -31,12 +31,16 @@ def _profiles(run, out):
 
 
 def _phase_space(run, out):
+    written = []
     paths = io.snapshot_paths(run, "phdf")
-    if not paths:
-        return []
-    snaps = [io.read_snapshot(p) for p in (paths[0], paths[-1])]
-    r = plots.phase_space(snaps, out / "phase_space.png")
-    return [r] if r else []
+    if paths:
+        snaps = [io.read_snapshot(p) for p in (paths[0], paths[-1])]
+        written.append(plots.phase_space(snaps, out / "phase_space.png"))
+    d = io.find_diagnostics(run)
+    if d and d.snapshot_names:
+        snaps = [d.snapshot(d.snapshot_names[0]), d.snapshot(d.snapshot_names[-1])]
+        written.append(plots.phase_space(snaps, out / "phase_space_substeps.png"))
+    return [w for w in written if w]
 
 
 def _fields(run, out):

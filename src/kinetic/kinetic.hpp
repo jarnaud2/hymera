@@ -71,7 +71,8 @@ PAR_SWARMVAR(int, particle, status);
 std::shared_ptr<StateDescriptor> Initialize(ParameterInput *pin, User* mhd_context);
 void ComputeParticleWeights(Mesh* pm);
 
-TaskStatus MakeOutputs(Outputs* pouts, Mesh* pmesh, ParameterInput* pinput, Real time, int iPR);
+// In-step particle snapshot into the diagnostics file; see Diagnostics.cpp.
+TaskStatus MakeOutputs(Mesh* pmesh, int cycle, int iCD, int iLA, Real t_in_step);
 
 void SaveRawFieldData(Mesh * pm, const char* filename);
 void LoadRawFieldData(Mesh * pm, const char* filename);

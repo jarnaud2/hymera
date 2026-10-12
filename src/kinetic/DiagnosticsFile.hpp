@@ -66,6 +66,12 @@ class DiagnosticsFile {
   /// Writes all buffered rows to disk and flushes the file.
   void Flush();
 
+  /// Writes one group /snapshots/<label>/ holding the given 1-D columns and the
+  /// scalar attributes, and flushes. An existing group of that name is replaced.
+  void WriteSnapshot(const std::string &label,
+                     const std::map<std::string, std::vector<double>> &columns,
+                     const std::map<std::string, double> &attributes);
+
   ~DiagnosticsFile();
 
  private:

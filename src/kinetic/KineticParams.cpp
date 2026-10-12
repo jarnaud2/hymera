@@ -145,6 +145,7 @@ KineticParams KineticParams::FromInput(ParameterInput *pin) {
   // Diagnostics only. The grid is a Deck param, so every output file carries it:
   // keep it small, or turn it off with Output/plot_fields=0.
   p.plot_fields = pin->GetOrAddInteger("Output", "plot_fields", 1);
+  p.substep_snapshots = pin->GetOrAddInteger("Output", "substep_snapshots", 0);
   p.NR_plot = pin->GetOrAddInteger("Output", "NR_plot", 10);
   p.NZ_plot = pin->GetOrAddInteger("Output", "NZ_plot", 20);
   p.Nt_plot = pin->GetOrAddInteger("Output", "Nt_plot", 3);

@@ -67,6 +67,10 @@ TaskCollection ConservationDriver::MakeTaskCollection(BlockList_t &blocks, SimTi
   Log::Debug("Task collection: dt = {:e}, dtCD = {:e}, dtLA = {:e} (tau_c = {:e} s)", dt, dtCD, dtLA, tau_c);
   dep = none;
 
+  // Mid-step particle snapshots (Output/substep_snapshots > 0); off by default,
+  // and then the task list is unchanged.
+  const bool snapshots = pkg->Param<int>("substep_snapshots") > 0;
+
   // Push-only sub-cycle: advance the particles then recompute the conserved
   // quantities (p_phi, mu). No avalanche or collision tasks.
   for (int iCD = 0; iCD < nCDperMHDstep; ++iCD) {
@@ -74,6 +78,7 @@ TaskCollection ConservationDriver::MakeTaskCollection(BlockList_t &blocks, SimTi
       Real t0 = iLA * dtLA + iCD * dtCD;
       dep = tl->AddTask(dep, PushParticles, pmesh, t0, dtLA);
       dep = tl->AddTask(dep, ComputeConservedQuantities, pmesh, t0 + dtLA, Real(tm.time));
+      if (snapshots) dep = tl->AddTask(dep, MakeOutputs, pmesh, tm.ncycle, iCD, iLA, t0 + dtLA);
     }
   }
 

@@ -176,6 +176,25 @@ void DiagnosticsFile::WriteProfile(const std::string &name,
   impl_->file.flush(H5F_SCOPE_GLOBAL);
 }
 
+void DiagnosticsFile::WriteSnapshot(const std::string &label,
+                                    const std::map<std::string, std::vector<double>> &columns,
+                                    const std::map<std::string, double> &attributes) {
+  H5::Group snaps = OpenOrCreateGroup(impl_->file, "snapshots");
+  if (snaps.nameExists(label)) snaps.unlink(label);
+  H5::Group g = snaps.createGroup(label);
+  for (const auto &[name, v] : columns) {
+    hsize_t n = v.size();
+    H5::DataSet ds = g.createDataSet(name, H5::PredType::NATIVE_DOUBLE, H5::DataSpace(1, &n));
+    if (n > 0) ds.write(v.data(), H5::PredType::NATIVE_DOUBLE);
+  }
+  for (const auto &[name, value] : attributes) {
+    H5::Attribute a = g.createAttribute(name, H5::PredType::NATIVE_DOUBLE,
+                                        H5::DataSpace(H5S_SCALAR));
+    a.write(H5::PredType::NATIVE_DOUBLE, &value);
+  }
+  impl_->file.flush(H5F_SCOPE_GLOBAL);
+}
+
 void DiagnosticsFile::Flush() {
   H5::Group ts = impl_->file.openGroup("timeseries");
   for (auto &[name, s] : impl_->series) {

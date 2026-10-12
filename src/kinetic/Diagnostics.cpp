@@ -12,6 +12,7 @@
 
 // Output-time diagnostics: field, guiding-centre and current plots, and the in-step MakeOutputs hook.
 
+#include <map>
 #include <memory>
 #include <numeric>
 #include <iostream>
@@ -295,13 +296,83 @@ void PlotCurrents(Mesh * pm, ParameterInput * pin, SimTime const & tm, User* mhd
   }
 }
 
-TaskStatus MakeOutputs(Outputs* pouts, Mesh* pmesh, ParameterInput* pinput, Real time, int iPR) {
-  auto md = pmesh->mesh_data.Get();
-  auto pkg = pmesh->packages.Get("Deck");
-//  pkg->UpdateParam("MyTime", time);
-//  pkg->UpdateParam("PredictorIterationNumber", iPR);
+// In-step snapshot hook. A driver adds it to its task list where the state in
+// the middle of a time step is wanted, e.g.
 //
-//  pouts->MakeOutputs(pmesh, pinput);
+//   dep = tl->AddTask(dep, MakeOutputs, pmesh, tm.ncycle, iCD, iLA, t0 + dtLA);
+//
+// Every Output/substep_snapshots-th call (0: never, the default) writes the
+// alive particles of all ranks to /snapshots/c<cycle>_cd<iCD>_la<iLA>/ in the
+// diagnostics file, with the time within the step [tau_c] and the cycle as
+// attributes. It reads the particles and changes nothing, and Parthenon's own
+// outputs and their numbering are untouched.
+TaskStatus MakeOutputs(Mesh* pmesh, int cycle, int iCD, int iLA, Real t_in_step) {
+  auto pkg = pmesh->packages.Get("Deck");
+  const int every = pkg->Param<int>("substep_snapshots");
+  if (every <= 0) return TaskStatus::complete;
+  static long long calls = 0;
+  if (calls++ % every != 0) return TaskStatus::complete;
+
+  auto md = pmesh->mesh_data.Get();
+  auto desc_r = parthenon::MakeSwarmPackDescriptor<
+      Kinetic::p, Kinetic::xi, Kinetic::R, Kinetic::phi, Kinetic::Z, Kinetic::weight>(
+      "particles");
+  auto desc_i = parthenon::MakeSwarmPackDescriptor<Kinetic::status>("particles");
+  auto pack_r = desc_r.GetPack(md.get());
+  auto pack_i = desc_i.GetPack(md.get());
+
+  // Copy the alive particles of this rank into a flat device array, then to host.
+  constexpr int NCOL = 7;  // p, xi, R, phi, Z, weight, status
+  const int nmax = pack_r.GetMaxFlatIndex() + 1;
+  Kokkos::View<Real **> buf("snapshot_buf", nmax, NCOL);
+  Kokkos::View<int> count("snapshot_count");
+  Kokkos::parallel_for(PARTHENON_AUTO_LABEL, nmax, KOKKOS_LAMBDA(const int idx) {
+    auto [b, n] = pack_r.GetBlockParticleIndices(idx);
+    const auto swarm_d = pack_r.GetContext(b);
+    if (!swarm_d.IsActive(n) || swarm_d.IsMarkedForRemoval(n) ||
+        !(pack_i(b, Kinetic::status(), n) & Kinetic::ALIVE))
+      return;
+    const int k = Kokkos::atomic_fetch_add(&count(), 1);
+    buf(k, 0) = pack_r(b, Kinetic::p(), n);
+    buf(k, 1) = pack_r(b, Kinetic::xi(), n);
+    buf(k, 2) = pack_r(b, Kinetic::R(), n);
+    buf(k, 3) = pack_r(b, Kinetic::phi(), n);
+    buf(k, 4) = pack_r(b, Kinetic::Z(), n);
+    buf(k, 5) = pack_r(b, Kinetic::weight(), n);
+    buf(k, 6) = pack_i(b, Kinetic::status(), n);
+  });
+  auto buf_h = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), buf);
+  int nlocal = 0;
+  Kokkos::deep_copy(nlocal, count);
+
+  // Column-major local block, so each column is contiguous for the gather.
+  std::vector<double> local(static_cast<size_t>(nlocal) * NCOL);
+  for (int c = 0; c < NCOL; ++c)
+    for (int k = 0; k < nlocal; ++k) local[c * nlocal + k] = buf_h(k, c);
+
+  int nranks = 1;
+  MPI_Comm_size(MPI_COMM_WORLD, &nranks);
+  std::vector<int> counts(nranks), displs(nranks);
+  MPI_Gather(&nlocal, 1, MPI_INT, counts.data(), 1, MPI_INT, 0, MPI_COMM_WORLD);
+  int ntotal = 0;
+  for (int r = 0; r < nranks; ++r) { displs[r] = ntotal; ntotal += counts[r]; }
+
+  static const char *names[NCOL] = {"p", "xi", "R", "phi", "Z", "weight", "status"};
+  std::map<std::string, std::vector<double>> columns;
+  for (int c = 0; c < NCOL; ++c) {
+    std::vector<double> all(Globals::my_rank == 0 ? ntotal : 0);
+    MPI_Gatherv(local.data() + static_cast<size_t>(c) * nlocal, nlocal, MPI_DOUBLE,
+                all.data(), counts.data(), displs.data(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    if (Globals::my_rank == 0) columns[names[c]] = std::move(all);
+  }
+
+  if (auto *diag = DiagnosticsFile::Get()) {
+    const std::string label = std::format("c{:06d}_cd{:03d}_la{:05d}", cycle, iCD, iLA);
+    diag->WriteSnapshot(label, columns,
+                        {{"cycle", double(cycle)}, {"iCD", double(iCD)}, {"iLA", double(iLA)},
+                         {"t_in_step_tau_c", t_in_step}, {"n_particles", double(ntotal)}});
+    Log::Debug("Snapshot {}: {} particles", label, ntotal);
+  }
   return TaskStatus::complete;
 }
 

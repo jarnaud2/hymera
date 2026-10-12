@@ -79,6 +79,7 @@ struct KineticParams {
 
   // Field-plot grid (diagnostics only). plot_fields == 0: not created or written.
   int plot_fields;
+  int substep_snapshots;        ///< MakeOutputs writes every Nth call; 0 = never
   int NR_plot, NZ_plot, Nt_plot;
 
   // Sample points for the max |E_par| search that sets the momentum boundary.

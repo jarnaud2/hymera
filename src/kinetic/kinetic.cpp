@@ -337,6 +337,7 @@ std::shared_ptr<StateDescriptor> Initialize(ParameterInput *pin, User* mhd_conte
 
 
   pkg->AddParam("plot_fields", prm.plot_fields);
+  pkg->AddParam("substep_snapshots", prm.substep_snapshots);
   if (prm.plot_fields != 0) {
     const Real R0_plot = data.hermite_locator.R0 + 1e-10;
     const Real Z0_plot = data.hermite_locator.Z0 + 1e-10;
