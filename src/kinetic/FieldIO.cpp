@@ -25,7 +25,7 @@
 
 using namespace parthenon;
 
-#include "kinetic/RunawayDriver.h"
+#include <parthenon/driver.hpp>
 #include "kinetic/kinetic.hpp"
 #include "kinetic/KineticParams.hpp"
 #include "kinetic/Log.hpp"

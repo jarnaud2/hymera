@@ -35,6 +35,20 @@ harness checks; add a regression case for it in the same commit.
   whole domain, with random p and xi. Its only caller was the disabled
   `tests/kinetic/conservation_test.cpp`.
 
-`MakeOutputs` is unreachable too, but stays in `kinetic.cpp` on purpose. It is
-the hook a driver's task list can call to write intermediate state inside one
-time step, for diagnostics and debugging.
+## Whole files never compiled
+
+These three files were in `src/kinetic/` but in no CMake target. They are kept
+whole, under an `_attic` name:
+
+- **RunawayDriver_attic.cpp / .h** -- an earlier single driver (`RunawayDriver`)
+  with its own `PushParticles(Mesh *, SimTime)`, `CheckScatter`,
+  `CleanupParticles` and `AddSecondaries`. The live versions of those tasks are
+  in `src/tasks/Particles.cpp`, used by `HybridDriver` and `AvalancheDriver`. The
+  header was still included by four compiled files, none of which used it; they
+  now include `<parthenon/driver.hpp>` directly.
+- **ConfigurationDomainGeometry_attic.cpp** -- an unfinished `InitializeGeometry`
+  that does not compile (`std::stared_ptr`, undeclared `NR`, `NZ` and file name).
+  The geometry is read in `SetupFieldGrid` (`kinetic.cpp`).
+
+`MakeOutputs` was unreachable too, but stays live in `Diagnostics.cpp` on
+purpose: it is the in-step snapshot hook (`Output/substep_snapshots`).
