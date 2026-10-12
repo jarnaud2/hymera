@@ -123,3 +123,9 @@ add_kinetic_test(conservation_dopri5_nocoll conservation  conservation_dopri5_no
 add_kinetic_test(profile                  profile         profile                  kinetic 4 parthenon/time/nlim=4)
 add_kinetic_test(single_particle          single_particle single_particle          kinetic 4 parthenon/time/nlim=4)
 add_kinetic_test(hybrid                   hybrid          hybrid                   slow    4 parthenon/time/nlim=1)
+
+# Diagnostics file across a restart: the restarted run must drop the rows after
+# the restart time and reproduce the uninterrupted run's series exactly.
+add_test(NAME kin_restart_diag
+         COMMAND ${KINETIC_HARNESS}/run_restart_diag.sh $<TARGET_FILE:conservation>)
+set_tests_properties(kin_restart_diag PROPERTIES LABELS "kinetic" TIMEOUT 600)

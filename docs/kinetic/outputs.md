@@ -39,14 +39,67 @@ The grid is diagnostics only. Two things used to depend on it and no longer do:
 
 Results are identical with `plot_fields` 0 or 1, and for any plot size.
 
+## Diagnostics file (`<problem_id>.diag.h5`)
+
+One HDF5 file per run, written by MPI rank 0 (`src/kinetic/DiagnosticsFile.hpp`).
+Every column is a 1-D float64 dataset with a `units` attribute.
+
+| Group | Columns | Written | Notes |
+|-------|---------|---------|-------|
+| `/timeseries/conservation` | `t` [s], `p_phi_mean`, `mu_mean`, `weight_total` | after every large-angle sub-step, when `Simulation/EnableComputeConservedQuantities=1` | weight-averaged invariants of the alive particles |
+| `/timeseries/currents` | `t` [s], `I_re_particles`, `I_re_grid`, `I_ohmic` | before every output, in `hybrid` | runaway current as a particle sum and as the deposited-grid integral; Ohmic current from the Hermite field |
+| `/profiles/collision` | `p` [m_e c], `gamma`, `dtSA` [tau_c], `psi`, `CB`, `CF`, `CouLogee_ratio`, `probability` | once, at set-up | collision coefficients against momentum |
+| `/meta` | attributes `problem_id`, `format` | at set-up | |
+
+`t` is the simulation time in seconds. The legacy `conservation.dat` time column
+was the time within the current MHD step in units of tau_c, so it restarted at
+zero every step.
+
+Rows are buffered and written to disk before every Parthenon output and at the
+end of the run. A job that is killed loses at most one output interval of rows
+and leaves a readable file.
+
+On restart (`-r`) the file is reopened, and the rows of every series with
+`t` after the restart time are dropped before the first step, so the series stay
+continuous with no duplicates. With collisions off, a restarted run reproduces
+the uninterrupted run's series exactly. With collisions on, the rows after the
+restart differ, because the random-number state is not part of the restart file.
+
+Read it with `scripts/hymera_plot` (`hymera_plot.io.find_diagnostics(run_dir)`) or
+any HDF5 reader.
+
+### Legacy text files
+
+`Simulation/legacy_dat=1` also writes the files the code wrote before the
+diagnostics file existed, with the same content as before: `conservation.dat`
+(name: `Simulation/conservation_log`) and `collision_profiles.dat`. Default 0.
+
 ## Other files
 
 | File | Written by | Control |
 |------|------------|---------|
-| `collision_profiles.dat` | `Initialize`, rank 0 | always |
-| `conservation.dat` | `ComputeConservedQuantities` | `Simulation/EnableComputeConservedQuantities=1`; name `Simulation/conservation_log` |
 | `current.out` | truncated by `Initialize` | `Simulation/file_path` |
 | `single_particle.dat` | `single_particle` | `SingleParticle/output_file` |
 | `<basename>.<n>.rdat` | `WorkBeforeRestartOutput`: MHD state next to each Parthenon restart | `MHD_Config/file_extention` |
 | `fields.h5` | `hybrid` with `Simulation/dump_raw_fields=1`, then exits | `Simulation/raw_fields_file` |
 | `TotalCurrent.txt` | MHD monitor (`src/mhd`) | `MHD_Config/monitor` |
+
+## Run log
+
+Rank 0 writes tagged lines (`[info]`, `[debug]`, `[warn]`) to stdout.
+`Simulation/verbosity` selects `quiet` (warnings only), `info` (default: set-up
+milestones and once-per-run values) or `debug` (adds per-step and per-block
+messages, and the current values written to `/timeseries/currents`).
+
+## Plotting
+
+```sh
+tests/regression/setup_env.sh                     # numpy, matplotlib, h5py in ~/.venv-hymera
+cd scripts && ~/.venv-hymera/bin/python -m hymera_plot all RUN_DIR
+```
+
+`all` writes every plot the run's files allow into `RUN_DIR/plots` (or `-o DIR`):
+`conservation.png`, `currents.png`, `collision_profiles.png`, `phase_space.png`
+and `fields.png` (needs `Output/plot_fields=1`). The single commands are
+`timeseries`, `profiles`, `phase-space` and `fields`. Runs made before the
+diagnostics file existed are read from their `.dat` files.

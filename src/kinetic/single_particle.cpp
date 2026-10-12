@@ -90,11 +90,13 @@ int main(int argc, char *argv[]) {
             << std::endl;
       };
 
+  Kinetic::AttachDiagnostics(pman);
   pman.ParthenonInitPackagesAndMesh();
 
   Kinetic::SingleParticleDriver driver(pman.pinput.get(), pman.app_input.get(),
                                        pman.pmesh.get(), state);
   driver.Execute();
+  Kinetic::FinishDiagnostics();
   pman.ParthenonFinalize();
   return 0;
 }

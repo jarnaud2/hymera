@@ -112,6 +112,7 @@ struct KineticSwitches {
   int EnableSmallAngleCollisions;
   int EnableComputeConservedQuantities;
   std::string conservation_log;
+  int legacy_dat;               ///< 1: also write the old .dat text diagnostics
 
   static KineticSwitches FromInput(ParameterInput *pin);
 };

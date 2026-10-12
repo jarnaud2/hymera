@@ -38,6 +38,7 @@ int main(int argc, char *argv[]) {
     Kinetic::WorkBeforeOutput(pm, pin, tm, p_mhd_config);
   };
 
+  Kinetic::AttachDiagnostics(pman);
   pman.ParthenonInitPackagesAndMesh();
 
   // The interpolated Hermite field grid is fully populated by Kinetic::Initialize
@@ -47,6 +48,7 @@ int main(int argc, char *argv[]) {
   if (pman.pinput->GetOrAddInteger("Simulation", "dump_raw_fields", 0) == 1) {
     const std::string fname = pman.pinput->GetOrAddString("Simulation", "raw_fields_file", "fields.h5");
     Kinetic::SaveRawFieldData(pman.pmesh.get(), fname.c_str());
+    Kinetic::FinishDiagnostics();
     MHD_CHECK(mhd_destroy(p_mhd_config));
     pman.ParthenonFinalize();
     return 0;
@@ -57,6 +59,7 @@ int main(int argc, char *argv[]) {
   Kinetic::HybridDriver driver(pman.pinput.get(), pman.app_input.get(), pman.pmesh.get(),
       p_mhd_config);
   driver.Execute();
+  Kinetic::FinishDiagnostics();
 
   MHD_CHECK(mhd_destroy(p_mhd_config));
   pman.ParthenonFinalize();

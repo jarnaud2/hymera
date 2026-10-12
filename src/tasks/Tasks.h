@@ -33,7 +33,9 @@ void AttachCurrentCollector(TaskList* tl, TaskID& dep, Mesh* pm, const Real dtCD
 
 TaskStatus RandomRemove(Mesh* pm);
 TaskStatus PushParticles(Mesh *pm, Real t0, Real dt);
-TaskStatus ComputeConservedQuantities(Mesh *pm, Real t);
+// t: time within the current MHD step [tau_c], used to evaluate the fields.
+// step_start: simulation time at the start of the step [s], for the record only.
+TaskStatus ComputeConservedQuantities(Mesh *pm, Real t, Real step_start = 0.0);
 TaskStatus CheckScatter(MeshBlock* pmb);
 TaskStatus CleanupParticles(MeshBlock* pmb);
 TaskStatus AddSecondaries(MeshBlock* pmb, const Real dtLA);

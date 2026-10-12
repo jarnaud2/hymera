@@ -190,6 +190,8 @@ KineticSwitches KineticSwitches::FromInput(ParameterInput *pin) {
   // Log file for the weight-averaged conservation diagnostic (p_phi, mu).
   s.conservation_log =
       pin->GetOrAddString("Simulation", "conservation_log", "conservation.dat");
+  // The diagnostics go to <problem_id>.diag.h5; the old text files are optional.
+  s.legacy_dat = pin->GetOrAddInteger("Simulation", "legacy_dat", 0);
   return s;
 }
 

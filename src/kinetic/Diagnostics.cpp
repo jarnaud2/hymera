@@ -29,6 +29,7 @@ using namespace parthenon;
 #include "kinetic/kinetic.hpp"
 #include "kinetic/KineticParams.hpp"
 #include "kinetic/Log.hpp"
+#include "kinetic/DiagnosticsFile.hpp"
 #include "kinetic/GuidingCenterEquations.hpp"
 #include "kinetic/LargeAngleCollision.hpp"
 #include "kinetic/SmallAngleCollision.hpp"
@@ -281,10 +282,16 @@ void PlotCurrents(Mesh * pm, ParameterInput * pin, SimTime const & tm, User* mhd
 
   MPI_Allreduce(MPI_IN_PLACE,&I_re,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
 
-  if (Globals::my_rank == 0) {
-    std::cout << std::format("{:20.14e} {:20.14e} {:20.14e}",
-        I_re * .5, I_re_integral * 5.3 * 2.0,
-        I_ohmic_hermite * 5.3  * 2.0 / pc::mu0) << std::endl;
+  // The scale factors are the ones this diagnostic has always printed with.
+  const Real I_re_particles = I_re * .5;
+  const Real I_re_grid = I_re_integral * 5.3 * 2.0;
+  const Real I_ohmic = I_ohmic_hermite * 5.3  * 2.0 / pc::mu0;
+  Log::Debug("Currents: particles {:20.14e}, deposited {:20.14e}, ohmic {:20.14e}",
+             I_re_particles, I_re_grid, I_ohmic);
+  if (auto *diag = DiagnosticsFile::Get()) {
+    diag->DeclareSeries("currents", {"t", "I_re_particles", "I_re_grid", "I_ohmic"},
+                        {"s", "", "", ""});
+    diag->Append("currents", {tm.time, I_re_particles, I_re_grid, I_ohmic});
   }
 }
 

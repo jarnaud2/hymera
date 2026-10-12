@@ -26,6 +26,7 @@ using namespace parthenon;
 #include "kinetic/kinetic.hpp"
 #include "kinetic/KineticParams.hpp"
 #include "kinetic/Log.hpp"
+#include "kinetic/DiagnosticsFile.hpp"
 #include "kinetic/GuidingCenterEquations.hpp"
 #include "kinetic/LargeAngleCollision.hpp"
 #include "kinetic/SmallAngleCollision.hpp"
@@ -401,23 +402,6 @@ std::shared_ptr<StateDescriptor> Initialize(ParameterInput *pin, User* mhd_conte
   const Real ximax = late.ximax;
   pkg->AddParam("ximax", ximax);
 
-  if (Globals::my_rank == 0) {
-    std::ofstream ofs("collision_profiles.dat");
-    ofs << std::format("{:20s} {:20s} {:20s} {:20s} {:20s} {:20s} {:20s} {:20s}",
-        "#     p", "gamma", "dtSA", "psi", "CB", "CF", "CouLogee ratio", "probability");
-    Real p = momentum_(1. + 2.e-3);
-    while (p < pkg->Param<Real>("pmax") + 20.0) {
-      auto cc = sa.getCollisionCoefficients(p);
-      ofs << std::format("{:20.14e} {:20.14e} {:20.14e} {:20.14e} {:20.14e} {:20.14e} {:20.14e} {:20.14e}",
-          p, gamma_(p),
-          sa.getSmallAngleCollisionTimestep(p),
-          cc.psi, cc.CB, cc.CF, cc.CouLogee_ratio,
-          ms.computeProbability(p, 1.0, dtLA_over_tauC, 1.002)
-      ) << std::endl;
-
-      p += 1e-2;
-    }
-  }
 
 
   if (npart > 0) {
@@ -457,8 +441,43 @@ std::shared_ptr<StateDescriptor> Initialize(ParameterInput *pin, User* mhd_conte
   // Log file for the weight-averaged conservation diagnostic (p_phi, mu).
   const std::string &conservation_log = sw.conservation_log;
   pkg->AddParam("conservation_log", conservation_log);
-  if (EnableComputeConservedQuantities == 1 && Globals::my_rank == 0) {
+  if (EnableComputeConservedQuantities == 1 && Globals::my_rank == 0 && sw.legacy_dat == 1) {
     std::ofstream(conservation_log);  // truncate at start of run
+  }
+  pkg->AddParam("legacy_dat", sw.legacy_dat);
+
+  // On restart the file is reopened as is; rows past the restart time are cut in
+  // WorkBeforeLoop, once Parthenon has restored the simulation time.
+  DiagnosticsFile::Open(pin->GetString("parthenon/job", "problem_id"), Globals::is_restart);
+  if (auto *diag = DiagnosticsFile::Get())
+    diag->DeclareSeries("conservation", {"t", "p_phi_mean", "mu_mean", "weight_total"},
+                        {"s", "", "", ""});
+
+  // Collision coefficients against momentum, written once per run.
+  if (Globals::my_rank == 0) {
+    std::vector<std::vector<double>> cols(8);
+    Real p = momentum_(1. + 2.e-3);
+    while (p < pkg->Param<Real>("pmax") + 20.0) {
+      auto cc = sa.getCollisionCoefficients(p);
+      const Real row[8] = {p, gamma_(p), sa.getSmallAngleCollisionTimestep(p),
+                           cc.psi, cc.CB, cc.CF, cc.CouLogee_ratio,
+                           ms.computeProbability(p, 1.0, dtLA_over_tauC, 1.002)};
+      for (int c = 0; c < 8; ++c) cols[c].push_back(row[c]);
+      p += 1e-2;
+    }
+    if (auto *diag = DiagnosticsFile::Get())
+      diag->WriteProfile("collision",
+          {"p", "gamma", "dtSA", "psi", "CB", "CF", "CouLogee_ratio", "probability"},
+          {"m_e c", "", "tau_c", "", "", "", "", ""}, cols);
+    if (sw.legacy_dat == 1) {
+      std::ofstream ofs("collision_profiles.dat");
+      ofs << std::format("{:20s} {:20s} {:20s} {:20s} {:20s} {:20s} {:20s} {:20s}",
+          "#     p", "gamma", "dtSA", "psi", "CB", "CF", "CouLogee ratio", "probability");
+      for (size_t i = 0; i < cols[0].size(); ++i)
+        ofs << std::format("{:20.14e} {:20.14e} {:20.14e} {:20.14e} {:20.14e} {:20.14e} {:20.14e} {:20.14e}",
+            cols[0][i], cols[1][i], cols[2][i], cols[3][i], cols[4][i], cols[5][i], cols[6][i], cols[7][i]
+        ) << std::endl;
+    }
   }
 
 

@@ -73,7 +73,7 @@ TaskCollection ConservationDriver::MakeTaskCollection(BlockList_t &blocks, SimTi
     for (int iLA = 0; iLA < nLAperCD; ++iLA) {
       Real t0 = iLA * dtLA + iCD * dtCD;
       dep = tl->AddTask(dep, PushParticles, pmesh, t0, dtLA);
-      dep = tl->AddTask(dep, ComputeConservedQuantities, pmesh, t0 + dtLA);
+      dep = tl->AddTask(dep, ComputeConservedQuantities, pmesh, t0 + dtLA, Real(tm.time));
     }
   }
 

@@ -56,10 +56,12 @@ int main(int argc, char *argv[]) {
     Kinetic::LoadFieldsFromInput(pm, pin);
   };
 
+  Kinetic::AttachDiagnostics(pman);
   pman.ParthenonInitPackagesAndMesh();
 
   Kinetic::ProfileDriver driver(pman.pinput.get(), pman.app_input.get(), pman.pmesh.get());
   driver.Execute();
+  Kinetic::FinishDiagnostics();
 
   pman.ParthenonFinalize();
   return 0;

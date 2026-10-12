@@ -4,6 +4,7 @@
 #include <globals.hpp>
 #include "kinetic/ParticleVerificator.hpp"
 #include "kinetic/Log.hpp"
+#include "kinetic/DiagnosticsFile.hpp"
 #include "kinetic/LargeAngleCollision.hpp"
 #include "kinetic/SmallAngleCollision.hpp"
 #include "kinetic/FieldEvaluator.hpp"
@@ -186,7 +187,7 @@ TaskStatus PushParticles(Mesh *pm, Real t0, Real dt) {
 // in the particle.p_phi / particle.mu swarm variables (for per-particle .phdf
 // output) and log a weight-averaged aggregate to a text file for a quick
 // conservation check. Gated by the "EnableComputeConservedQuantities" param.
-TaskStatus ComputeConservedQuantities(Mesh *pm, Real t) {
+TaskStatus ComputeConservedQuantities(Mesh *pm, Real t, Real step_start) {
 
   auto pkg = pm->packages.Get("Deck");
   const int EnableComputeConservedQuantities =
@@ -255,8 +256,14 @@ TaskStatus ComputeConservedQuantities(Mesh *pm, Real t) {
   MPI_Allreduce(MPI_IN_PLACE, &mu_total,    1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
   MPI_Allreduce(MPI_IN_PLACE, &w_total,     1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
-  if (Globals::my_rank == 0) {
-    const Real inv_w = (w_total > 0.0) ? 1.0 / w_total : 0.0;
+  const Real inv_w = (w_total > 0.0) ? 1.0 / w_total : 0.0;
+  if (auto *diag = DiagnosticsFile::Get()) {
+    // Run time [s]: the step start plus the time within the step.
+    const Real time = step_start + t * pkg->Param<Real>("tau_c");
+    diag->Append("conservation", {time, p_phi_total * inv_w, mu_total * inv_w, w_total});
+  }
+  if (Globals::my_rank == 0 && pkg->Param<int>("legacy_dat") == 1) {
+    // Legacy text file: the time column is the time within the step [tau_c].
     std::ofstream ofs(pkg->Param<std::string>("conservation_log"), std::ios::app);
     ofs << std::format("{:20.14e} {:20.14e} {:20.14e} {:20.14e}",
                        t, p_phi_total * inv_w, mu_total * inv_w, w_total)

@@ -19,8 +19,10 @@
 #include <string>
 #include <parthenon/package.hpp>
 #include <parthenon_manager.hpp>
+#include <globals.hpp>
 
 #include "kinetic/kinetic.hpp"
+#include "kinetic/DiagnosticsFile.hpp"
 #include "mhd/mhd.h"
 
 namespace Kinetic {
@@ -61,5 +63,38 @@ inline void LoadFieldsFromInput(parthenon::Mesh *pm, parthenon::ParameterInput *
   const std::string load_fields = pin->GetOrAddString("Simulation", "load_fields", "fields.h5");
   LoadRawFieldData(pm, load_fields.c_str());
 }
+
+/// Connects the run's diagnostics file to the Parthenon hooks. Call after main
+/// has set its own hooks and before ParthenonInitPackagesAndMesh: each hook main
+/// set still runs, first, unchanged.
+///   UserWorkBeforeLoop        on restart, drop rows after the restart time
+///   UserMeshWorkBeforeOutput  flush, so the file is complete at every output
+/// Parthenon writes the final output after UserWorkAfterLoop, so the file is
+/// closed by FinishDiagnostics, after the driver has returned.
+inline void AttachDiagnostics(parthenon::ParthenonManager &pman) {
+  using parthenon::Mesh;
+  using parthenon::ParameterInput;
+  using parthenon::SimTime;
+  auto &in = *pman.app_input;
+
+  auto before_loop = in.UserWorkBeforeLoop;
+  in.UserWorkBeforeLoop = [before_loop](Mesh *pm, ParameterInput *pin, SimTime &tm) {
+    if (before_loop) before_loop(pm, pin, tm);
+    if (auto *d = DiagnosticsFile::Get(); d && parthenon::Globals::is_restart)
+      d->TruncateAfter(tm.time);
+  };
+
+  auto before_output = in.UserMeshWorkBeforeOutput;
+  in.UserMeshWorkBeforeOutput = [before_output](Mesh *pm, ParameterInput *pin,
+                                                SimTime const &tm) {
+    if (before_output) before_output(pm, pin, tm);
+    FlushDiagnostics();
+  };
+
+}
+
+/// Writes the remaining rows and closes the diagnostics file. Call after
+/// driver.Execute().
+inline void FinishDiagnostics() { DiagnosticsFile::Close(); }
 
 } // namespace Kinetic

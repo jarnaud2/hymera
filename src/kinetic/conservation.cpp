@@ -30,10 +30,12 @@ int main(int argc, char *argv[]) {
     Kinetic::HijackEField(pm);
   };
 
+  Kinetic::AttachDiagnostics(pman);
   pman.ParthenonInitPackagesAndMesh();
 
   Kinetic::ConservationDriver driver(pman.pinput.get(), pman.app_input.get(), pman.pmesh.get());
   driver.Execute();
+  Kinetic::FinishDiagnostics();
   pman.ParthenonFinalize();
   return 0;
 }
