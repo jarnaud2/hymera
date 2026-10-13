@@ -120,3 +120,30 @@ cd scripts && ~/.venv-hymera/bin/python -m hymera_plot all RUN_DIR
 and `fields.png` (needs `Output/plot_fields=1`). The single commands are
 `timeseries`, `profiles`, `phase-space` and `fields`. Runs made before the
 diagnostics file existed are read from their `.dat` files.
+
+## Particle push: serial or parallel
+
+`Simulation/parallel_push` (default 1) selects how the particle push loop runs.
+
+| Value | Host (OpenMP) build | Reproducibility |
+|-------|---------------------|-----------------|
+| 1 | Kokkos parallel loop over `OMP_NUM_THREADS` threads | Collisions off: bit-identical to 0 at any thread count. Collisions on: the random draws each particle gets depend on the thread schedule, so runs agree statistically, not bit for bit. |
+| 0 | one serial loop (Parthenon's `DEFAULT_LOOP_PATTERN` on host) | Bit-identical at any thread count, including with collisions. The regression decks use this. |
+
+On CUDA both values give the same parallel kernel.
+
+Measured on the 16,384-particle `conservation.input` deck run by `profile` (push
+only), seconds per MHD step:
+
+| Threads | `parallel_push=0` | `parallel_push=1` |
+|---------|------|------|
+| 1 | 31.6 | 29.5 |
+| 4 | 31.6 | 8.1 |
+| 6 | 31.6 | 5.8 |
+
+The container used for these numbers has a 6-CPU quota (`cpu.max`), so more
+threads than that get slower, not faster (16 threads: 103 s). Set
+`OMP_NUM_THREADS` to the CPUs actually available.
+
+With collisions on, the alive-particle mean momentum after 2 steps differed
+between the two settings by 0.01 standard errors.

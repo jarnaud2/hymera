@@ -114,6 +114,7 @@ struct KineticSwitches {
   int EnableComputeConservedQuantities;
   std::string conservation_log;
   int legacy_dat;               ///< 1: also write the old .dat text diagnostics
+  int parallel_push;            ///< 1: parallel particle push (see Particles.cpp)
 
   static KineticSwitches FromInput(ParameterInput *pin);
 };

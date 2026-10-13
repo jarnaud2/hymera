@@ -193,6 +193,9 @@ KineticSwitches KineticSwitches::FromInput(ParameterInput *pin) {
       pin->GetOrAddString("Simulation", "conservation_log", "conservation.dat");
   // The diagnostics go to <problem_id>.diag.h5; the old text files are optional.
   s.legacy_dat = pin->GetOrAddInteger("Simulation", "legacy_dat", 0);
+  // 0: serial host push, reproducible across thread counts (regression tests).
+  // 1: parallel push over all threads; see ParticleLoop in src/tasks/Particles.cpp.
+  s.parallel_push = pin->GetOrAddInteger("Simulation", "parallel_push", 1);
   return s;
 }
 

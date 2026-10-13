@@ -467,6 +467,7 @@ void SetupDiagnostics(ParameterInput *pin, const KineticParams &prm,
     std::ofstream(conservation_log);  // truncate at start of run
   }
   pkg->AddParam("legacy_dat", sw.legacy_dat);
+  pkg->AddParam("parallel_push", sw.parallel_push);
 
   // On restart the file is reopened as is; rows past the restart time are cut in
   // WorkBeforeLoop, once Parthenon has restored the simulation time.

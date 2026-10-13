@@ -69,6 +69,7 @@ ximin = 0.85
 ximax = 0.95
 
 <Simulation>
+parallel_push=0   # serial host push: bit-reproducible at any thread count
 EnableLargeAngleCollisions=1
 EnableSmallAngleCollisions=1
 EnableComputeConservedQuantities=0

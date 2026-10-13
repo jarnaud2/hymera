@@ -32,6 +32,10 @@ installs it.
 | `kin_single_particle` | `single_particle` | `SingleParticleDriver`, host-side single orbit, `single_particle.dat` | 4 |
 | `kin_hybrid` | `hybrid` | MHD coupling, `GenerateParticleCurrentDensity`, field interpolation, `HybridDriver` | 4 |
 
+All decks set `Simulation/parallel_push=0` (serial host push), which keeps
+collision runs bit-identical at any thread count. Production runs default to the
+parallel push; see `docs/kinetic/outputs.md`.
+
 Each case is run at 1 and 4 OpenMP threads before its baseline is accepted. All
 particle data is bit-identical between the two. The exception is
 `conservation.dat` in `kin_conservation`: its totals are a `Kokkos::parallel_reduce`

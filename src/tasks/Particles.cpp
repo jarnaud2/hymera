@@ -36,6 +36,24 @@ StepParticle(const GCE &gce, const Ver &ver, Dim5 &X, const Real t,
   }
 }
 
+// Runs body(idx) for idx in [0, max_index], over all particles of the pack.
+// Simulation/parallel_push = 0 (default) keeps Parthenon's DEFAULT_LOOP_PATTERN,
+// which on a host build is one serial loop: random numbers are drawn in particle
+// order, so collision runs are reproducible bit for bit and independent of the
+// thread count. 1 runs a Kokkos parallel loop over all threads: much faster on
+// CPU, but with collisions the random draws per particle depend on the thread
+// schedule. On CUDA both settings give the same parallel kernel.
+template <typename Body>
+static void ParticleLoop(const std::shared_ptr<StateDescriptor> &pkg, const int max_index,
+                         const Body &body) {
+  if (pkg->Param<int>("parallel_push") == 1)
+    parthenon::par_for(parthenon::loop_pattern_flatrange_tag, PARTHENON_AUTO_LABEL,
+                       DevExecSpace(), 0, max_index, body);
+  else
+    parthenon::par_for(DEFAULT_LOOP_PATTERN, PARTHENON_AUTO_LABEL,
+                       DevExecSpace(), 0, max_index, body);
+}
+
 template <int METHOD>
 static TaskStatus PushParticlesImpl(Mesh *pm, Real t0, Real dt) {
 
@@ -93,10 +111,7 @@ static TaskStatus PushParticlesImpl(Mesh *pm, Real t0, Real dt) {
   int EnableLargeAngleCollisions = pkg->Param<int>("EnableLargeAngleCollisions");
   int EnableSmallAngleCollisions = pkg->Param<int>("EnableSmallAngleCollisions");
 
-  parthenon::par_for(DEFAULT_LOOP_PATTERN, PARTHENON_AUTO_LABEL,
-                     DevExecSpace(), 0, pack_swarm_r.GetMaxFlatIndex(),
-                     // new_n ranges from 0 to N_new_particles
-                     KOKKOS_LAMBDA(const int idx) {
+  auto push = KOKKOS_LAMBDA(const int idx) {
         // block and particle indices
         auto [b, n] = pack_swarm_r.GetBlockParticleIndices(idx);
         const auto swarm_d = pack_swarm_r.GetContext(b);
@@ -165,7 +180,8 @@ static TaskStatus PushParticlesImpl(Mesh *pm, Real t0, Real dt) {
             pack_swarm_i(b, Kinetic::will_scatter(), n) = ms(X[0], w, dt, gamma_min, rng_pool);
           }
         }
-      });
+      };
+  ParticleLoop(pkg, pack_swarm_r.GetMaxFlatIndex(), push);
 
   return TaskStatus::complete;
 
