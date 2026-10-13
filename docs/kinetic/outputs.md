@@ -147,3 +147,8 @@ threads than that get slower, not faster (16 threads: 103 s). Set
 
 With collisions on, the alive-particle mean momentum after 2 steps differed
 between the two settings by 0.01 standard errors.
+
+`scripts/bench_push.sh` reruns this benchmark (`--help` for the options). Bind
+the MPI rank to as many cores as threads (`mpirun --bind-to none`, or
+`srun --cpus-per-task=N --cpu-bind=cores`); a rank pinned to one core runs all
+its threads on that core and shows no speed-up.
