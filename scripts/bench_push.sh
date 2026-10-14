@@ -21,6 +21,8 @@
 #                         threads, or all threads share one core.
 #                         The string "{threads}" is replaced by the thread count.
 #   --keep DIR            keep the run directories under DIR
+#   --set "B/k=v ..."     extra input-deck overrides, e.g.
+#                         "Simulation/integrator=dopri5 Simulation/EnableSmallAngleCollisions=0"
 #
 # Output: one line per thread count,
 #   label  threads  particles  s/step  alive  mean_p
@@ -28,8 +30,8 @@
 # check that the runs did the same physics, not part of the timing.
 set -euo pipefail
 
-usage() { sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-2}"; }
-LABEL=""; PP=1; THREADS="1"; NPB=2048; NLIM=3; KEEP=""
+usage() { sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-2}"; }
+LABEL=""; PP=1; THREADS="1"; NPB=2048; NLIM=3; KEEP=""; SET=""
 # --bind-to none: Open MPI otherwise pins the one rank to one core, and every
 # OpenMP thread then shares it (no speed-up from threads at all).
 LAUNCH_DEFAULT=""; command -v mpirun >/dev/null && LAUNCH_DEFAULT="mpirun -n 1 --bind-to none"
@@ -43,6 +45,7 @@ while [ $# -gt 0 ]; do
     --nlim) NLIM="$2"; shift 2 ;;
     --launch) LAUNCH="$2"; shift 2 ;;
     --keep) KEEP="$2"; shift 2 ;;
+    --set) SET="$2"; shift 2 ;;
     -h|--help) usage 0 ;;
     -*) echo "unknown option: $1" >&2; usage ;;
     *) [ -z "${EXE_ARG:-}" ] || usage; EXE_ARG="$1"; shift ;;
@@ -53,7 +56,8 @@ EXE="$(cd "$(dirname "$EXE_ARG")" && pwd)/$(basename "$EXE_ARG")"
 [ -x "$EXE" ] || { echo "not executable: $EXE" >&2; exit 1; }
 [ -n "$LABEL" ] || LABEL="parallel_push=$PP"
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# The repository: HYMERA_REPO, or the directory this script lives in (scripts/..).
+REPO="${HYMERA_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 DECK="$REPO/tests/regression/kinetic/decks/conservation.input"
 FIELDS="$REPO/tests/regression/kinetic/fixtures/fields.h5"
 PYTHON="${HARNESS_PYTHON:-python3}"
@@ -74,7 +78,7 @@ for T in $THREADS; do
   if ! (cd "$WORK/r1/r2" && OMP_NUM_THREADS=$T OMP_PROC_BIND=spread OMP_PLACES=threads \
         $CMD "$EXE" -i "$DECK" parthenon/time/nlim="$NLIM" \
         ParticleSeed/num_particles_per_block="$NPB" Simulation/parallel_push="$PP" \
-        Simulation/verbosity=quiet > log.txt 2>&1); then
+        Simulation/verbosity=quiet $SET > log.txt 2>&1); then
     echo "run failed ($LABEL, $T threads); see $WORK/r1/r2/log.txt" >&2
     tail -5 "$WORK/r1/r2/log.txt" >&2
     exit 1
