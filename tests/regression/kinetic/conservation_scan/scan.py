@@ -32,7 +32,8 @@ from pathlib import Path
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
-REPO = HERE.parents[3]
+# HYMERA_REPO overrides the repository location when this script is run from a copy.
+REPO = Path(os.environ.get("HYMERA_REPO", HERE.parents[3]))
 DECK = REPO / "tests/regression/kinetic/decks/single_particle.input"
 FIELDS = REPO / "tests/regression/kinetic/fixtures/fields.h5"
 
