@@ -1,0 +1,9 @@
+# Test particles for the GCE conservation scan: name p xi R Z
+# (p in m_e c, xi = v_par/v, R and Z in units of the minor radius a).
+# Chosen around the MHD fixture's magnetic axis (R, Z) = (3.10, 0.33). For the
+# analytic fields (axis at (3.1, 0)) scan.py shifts Z by -0.33.
+passing_hi   15.0   0.90  3.60   0.33
+passing_lo    5.0   0.70  3.40   0.33
+passing_neg  10.0  -0.80  3.55   0.33
+barely       15.0   0.35  3.60   0.33
+trapped      12.0   0.20  3.55   0.33

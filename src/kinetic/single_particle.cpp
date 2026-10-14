@@ -33,6 +33,7 @@
 #include "SingleParticleDriver.h"
 #include "kinetic.hpp"
 #include "AppSetup.hpp"
+#include "AnalyticFieldEvaluator.hpp"
 
 using namespace parthenon;
 using namespace parthenon::driver::prelude;
@@ -46,7 +47,35 @@ int main(int argc, char *argv[]) {
   // same object. Seeded from the <SingleParticle> input block.
   auto state = std::make_shared<Kinetic::SingleParticleState>();
 
-  Kinetic::RegisterKineticPackage(pman, nullptr);
+  // The Deck package, plus the single-particle field source:
+  //   SingleParticle/field_source = grid (default) | analytic
+  // "analytic" pushes in the exact AnalyticFieldEvaluator (no interpolation);
+  // its parameters are AnalyticField/q0, q2, R_a, B0 and E_0.
+  pman.app_input->ProcessPackages = [](std::unique_ptr<ParameterInput> &pin) {
+    Packages_t packages;
+    auto pkg = Kinetic::Initialize(pin.get(), nullptr);
+    const std::string src = pin->GetOrAddString("SingleParticle", "field_source", "grid");
+    // "analytic_grid": sample the analytic field onto the FD grid and run the
+    // production interpolation (Hermite fit, divergence cleaning, psi
+    // reconstruction); SingleParticle/grid_J = data (default, as in production)
+    // or curlB (J recomputed as the curl of the interpolated B).
+    pkg->AddParam("sp_analytic", src == "analytic" ? 1 : 0);
+    pkg->AddParam("sp_analytic_grid", src == "analytic_grid" ? 1 : 0);
+    // SingleParticle/grid_J: data (default) | curlB (the stored J coefficients
+    // are refit from the curl of the interpolated B; affects only the MHD-J
+    // users, since the GCE always uses the pointwise curl of B).
+    const std::string gridJ = pin->GetOrAddString("SingleParticle", "grid_J", "data");
+    pkg->AddParam("sp_grid_J_curlB", gridJ == "curlB" ? 1 : 0);
+    Kinetic::AnalyticFieldEvaluator af{
+        pin->GetOrAddReal("AnalyticField", "q0", 2.1),
+        pin->GetOrAddReal("AnalyticField", "q2", 2.0),
+        pin->GetOrAddReal("AnalyticField", "R_a", 3.1),
+        pin->GetOrAddReal("AnalyticField", "B0", -1.0),
+        pkg->Param<Real>("E_0")};
+    pkg->AddParam("sp_analytic_field", af);
+    packages.Add(pkg);
+    return packages;
+  };
 
   // Particle generation does nothing: the single particle is a host variable,
   // not a swarm particle.
@@ -65,9 +94,17 @@ int main(int argc, char *argv[]) {
         state->X[4] = pin->GetReal("SingleParticle", "Z");
         state->t = 0.0;
 
-        // Load the pre-interpolated field grid (no MHD).
-        Kinetic::LoadFieldsFromInput(pm, pin);
-        Kinetic::HijackEField(pm);
+        // Load the pre-interpolated field grid (no MHD); not used with the
+        // analytic field source.
+        auto deck = pm->packages.Get("Deck");
+        if (deck->Param<int>("sp_analytic_grid") == 1) {
+          Kinetic::FillGridFromAnalytic(pm);
+        } else if (deck->Param<int>("sp_analytic") == 0) {
+          Kinetic::LoadFieldsFromInput(pm, pin);
+          Kinetic::HijackEField(pm);
+          if (deck->Param<int>("sp_grid_J_curlB") == 1)
+            Kinetic::ReplaceJByCurlOfHermiteB(deck->Param<Kinetic::FieldData_t>("FieldData"));
+        }
 
         // Populate the initial conserved quantities and start the output file.
         Kinetic::ComputeConservedForState(pm, state);

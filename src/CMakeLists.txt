@@ -37,6 +37,7 @@ add_library(infrastructure
   kinetic/Diagnostics.cpp
   kinetic/Hooks.cpp
   kinetic/DiagnosticsFile.cpp
+  kinetic/AnalyticFieldGrid.cpp
   tasks/BackgroundFields.cpp
   tasks/ComputeElectricField.cpp
   tasks/Interpolate.cpp
