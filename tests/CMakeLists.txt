@@ -129,3 +129,11 @@ add_kinetic_test(hybrid                   hybrid          hybrid                
 add_test(NAME kin_restart_diag
          COMMAND ${KINETIC_HARNESS}/run_restart_diag.sh $<TARGET_FILE:conservation>)
 set_tests_properties(kin_restart_diag PROPERTIES LABELS "kinetic" TIMEOUT 600)
+
+# Guiding-centre invariants: p_phi and mu conserved by rk4 and dopri5 in an exact
+# analytic field, the same field through the production interpolation, and the
+# MHD fixture (see regression/kinetic/conservation_scan/check.py).
+add_test(NAME kin_gce_conservation
+         COMMAND ${KINETIC_HARNESS}/conservation_scan/run_check.sh
+                 --exe $<TARGET_FILE:single_particle>)
+set_tests_properties(kin_gce_conservation PROPERTIES LABELS "kinetic" TIMEOUT 1200)

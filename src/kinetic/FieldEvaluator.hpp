@@ -35,7 +35,8 @@ struct EvalGCE {
   Dim3 B = {};
   Dim3 dBdR = {};
   Dim3 dBdZ = {};
-  Dim3 J = {};
+  Dim3 J = {};      ///< MHD current density (interpolated from the field data)
+  Dim3 curlB = {};  ///< curl of this B, from B, dBdR and dBdZ at the same point
   Dim3 E = {};
   Dim3 dbdt = {};
   Real Bsq;
@@ -228,6 +229,14 @@ struct FieldEvaluator {
     for (int i = 0; i < 3; ++i) {
       out.dbdt[i] = (out.dbdt[i] - out.B[i] * BBt / out.Bsq)  / out.Bmag;
     }
+
+    // curl B of the interpolated B in (R, phi, Z), axisymmetric. The guiding-
+    // centre equations need the curl of the B they use: the MHD J above is the
+    // solver's own (mimetic, staggered) curl averaged to cell centres, which
+    // differs from it by up to ~1% and breaks p_phi conservation.
+    out.curlB[0] = -out.dBdZ[1];
+    out.curlB[1] = out.dBdZ[0] - out.dBdR[2];
+    out.curlB[2] = out.dBdR[1] + out.B[1] / R;
   }
 };
 } // namespace kinetic

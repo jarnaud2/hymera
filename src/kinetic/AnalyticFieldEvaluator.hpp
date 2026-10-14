@@ -68,6 +68,7 @@ struct AnalyticFieldEvaluator {
     out.J[0] = -out.dBdZ[1];
     out.J[1] = out.dBdZ[0] - out.dBdR[2];
     out.J[2] = out.dBdR[1] + out.B[1] / R;
+    out.curlB = out.J;
 
     out.E[0] = 0.0;
     out.E[1] = E_0 * R_a / R;

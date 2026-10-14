@@ -30,6 +30,7 @@ installs it.
 | `kin_conservation_dopri5_nocoll` | `conservation` | dopri5 adaptive push, collisions off | 4 |
 | `kin_profile` | `profile` | `ProfileDriver` push-only task list | 4 |
 | `kin_single_particle` | `single_particle` | `SingleParticleDriver`, host-side single orbit, `single_particle.dat` | 4 |
+| `kin_gce_conservation` | `single_particle` | p_phi and mu conservation, rk4 and dopri5, analytic / interpolated-analytic / MHD fields | 1 |
 | `kin_hybrid` | `hybrid` | MHD coupling, `GenerateParticleCurrentDensity`, field interpolation, `HybridDriver` | 4 |
 
 All decks set `Simulation/parallel_push=0` (serial host push), which keeps
@@ -90,6 +91,44 @@ restored.
 | `rk4.hpp` first `0.5 * h` stage to `0.5000001 * h` | FAIL | pass (dopri5) | FAIL | FAIL |
 
 Each "pass" follows from what the case runs, so none of them is a blind spot.
+
+## Guiding-centre invariants (`kin_gce_conservation`)
+
+`conservation_scan/check.py` runs `single_particle` for five test particles
+(`conservation_scan/particles.txt`: passing, counter-passing, barely passing,
+trapped) with collisions off, `alpha0 = 0` and the static toroidal
+`E_phi = E_0 R_a / R` (`E_0 = 77`), over 3 poloidal transits, for two rk4 steps
+and two dopri5 tolerances, in three fields (`SingleParticle/field_source`):
+
+- `analytic`: `AnalyticFieldEvaluator`, an exact large-aspect-ratio field
+  with J = curl B and psi = B0 ln(q/q0)/(2 q2), no interpolation.
+- `analytic_grid`: the same field sampled onto the grid and put through the
+  production pipeline (Hermite fit, divergence cleaning, psi reconstruction,
+  axis shift).
+- `grid`: the MHD fixture `fields.h5`.
+
+It checks |dp_phi|/|p_phi0| and |dmu|/mu0 at the finer setting of each integrator
+against the bounds in `check.py`. With a static field both are exact invariants
+of the guiding-centre equations.
+
+`conservation_scan/scan.py` is the full study (6 rk4 steps, 7 dopri5
+tolerances, 10 transits) with plots of the error against time per integrator.
+
+### Why the GCE uses curl B and not the MHD J
+
+B* in `GuidingCenterEquations.hpp` contains curl b = curl B / |B| + b x grad ln B.
+p_phi is conserved exactly only if that curl B is the curl of the B the
+equations use. The stored MHD current is the solver's own mimetic curl on the
+staggered grid, averaged to cell centres; in `fields.h5` it differs from the
+cell-centred curl of the cell-centred B by up to 0.7% of max J_phi, and by about
+1% of |B| after interpolation. With it, p_phi drifted secularly by up to
+5e-4 per tau_c (1.5e-3 over 10 transits) for passing particles, independent of
+integrator and step size. `FieldEvaluator` now also returns `curlB`, the curl
+of the interpolated B at the evaluation point, and the GCE uses it; the drift is
+then 1e-8 .. 1e-11 (integration error). The MHD J is still used where the
+current itself is the quantity: Ohm's law (`ComputeBaseElectricField*`, from
+the field data), the seeding density in `GenerateParticleCurrentDensity`, and the
+Ohmic-current diagnostic.
 
 ## Not covered
 

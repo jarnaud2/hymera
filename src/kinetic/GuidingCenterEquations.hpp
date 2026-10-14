@@ -102,7 +102,9 @@ template <class Field, bool EF = true, bool SlabModel = true> struct GuidingCent
 
     Dim3 Bstar;
     for (int i = 0; i < 3; ++i) {
-      Bstar[i] = ev.B[i] - c_aw0 * p * xi * (b_x_gradlnB[i] + ev.J[i] / Bmag);
+      // curl b = curl B / |B| + b x grad ln B, with curl B of this same B (see
+      // EvalGCE::curlB); p_phi is an exact invariant only with that choice.
+      Bstar[i] = ev.B[i] - c_aw0 * p * xi * (b_x_gradlnB[i] + ev.curlB[i] / Bmag);
       // Modify electric field by p_parallel * dbdt
       ev.E[i] -= p * xi * ev.dbdt[i];
     }
