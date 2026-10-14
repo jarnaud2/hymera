@@ -8,7 +8,8 @@ Reads DIR/summary.csv and DIR/runs/*/*/single_particle.dat and writes:
   DIR/figures/error_time_dopri5.png  (dashed), relative, averaged over particles;
                                      one colour per hRK (rk4) or rtol (dopri5)
   DIR/figures/error_vs_cost.png      end-of-run error against wall time, both integrators
-  DIR/figures/orbits.png             R-Z orbit of each test particle (finest dopri5 run)
+  DIR/figures/orbits.png             R-Z orbit of each test particle, one panel each
+                                     (finest dopri5 run; output samples as dots)
 """
 import csv
 import sys
@@ -72,7 +73,7 @@ def error_time_plot(rows, integ, key, label_fmt, title, path, t_orbit):
         ax.plot(x[1:], dpp[1:], color=c, lw=1.8, label=tag)
         ax.plot(x[1:], dmu[1:], color=c, lw=1.8, ls="--")
     ax.set_yscale("log")
-    ax.set_xlabel("time [poloidal transit times of the reference orbit]")
+    ax.set_xlabel(f"time [poloidal transits of the reference orbit, {t_orbit:.3g} $\\tau_c$]")
     ax.set_ylabel("relative error, mean over particles")
     ax.set_title(title, loc="left")
     # Line-style key, separate from the colour legend.
@@ -109,22 +110,54 @@ def error_vs_cost(rows, path):
     plt.close(fig)
 
 
-def orbits(rows, path):
+def orbits(rows, path, t_orbit):
+    """Small multiples, one panel per particle, of the finest dopri5 run: the
+    first 2 transits from the finely sampled orbit run (DIR/orbits, 200 samples
+    per transit) as a line, all samples of the long run as small light dots, so
+    drift-surface width and precession show without hiding the orbit shape."""
     dp = sorted({(float(r["rtol"]), r["setting"]) for r in rows if r["integrator"] == "dopri5"})
     if not dp:
         return
-    finest = dp[0][1]
-    runs = [r for r in rows if r["integrator"] == "dopri5" and r["setting"] == finest and not r["failed"]]
-    fig, ax = plt.subplots(figsize=(5, 6), constrained_layout=True)
+    rtol, finest = dp[0]
+    runs = {r["particle"]: r for r in rows
+            if r["integrator"] == "dopri5" and r["setting"] == finest and not r["failed"]}
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from scan import read_particles  # noqa: E402
+    parts = read_particles(Path(__file__).resolve().parent / "particles.txt")
     palette = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"]
-    for r, c in zip(runs, palette):
+    axis_R, axis_Z = 3.10, 0.33
+    n = len(parts)
+    fig, axes = plt.subplots(1, n, figsize=(2.3 * n, 4.6), sharex=True, sharey=True,
+                             constrained_layout=True, squeeze=False)
+    axes = axes[0]
+    dt_out = None
+    for ax, part, c in zip(axes, parts, palette):
+        ax.plot(axis_R, axis_Z, "+", color="0.25", ms=9, mew=1.2)
+        ax.set_title(f"{part['name']}\n$p$ = {part['p']:g} $m_ec$, $\\xi$ = {part['xi']:g}",
+                     fontsize=9)
+        ax.set_aspect("equal")
+        ax.grid(True, alpha=0.25)
+        r = runs.get(part["name"])
+        if r is None:
+            ax.text(0.5, 0.5, "run failed", transform=ax.transAxes, ha="center", fontsize=9)
+            continue
         a = np.loadtxt(r["dat"], ndmin=2)
-        ax.plot(a[:, 3], a[:, 5], color=c, lw=1.0, label=r["particle"])
-        ax.plot(a[0, 3], a[0, 5], "o", color=c, ms=6)
-    ax.set_aspect("equal")
-    ax.set_xlabel("R [a]"); ax.set_ylabel("Z [a]")
-    ax.set_title(f"Test orbits (dopri5 {finest}); dots: start", loc="left", fontsize=9)
-    ax.legend(fontsize=8)
+        if dt_out is None and len(a) > 1:
+            dt_out = a[1, 0] - a[0, 0]
+        ax.plot(a[:, 3], a[:, 5], ".", color=c, ms=1.0, mew=0, alpha=0.35)
+        fine = Path(r["dat"]).parents[5] / "orbits" / part["name"] / "r1" / "r2" / "single_particle.dat"
+        if fine.exists():
+            b = np.loadtxt(fine, ndmin=2)
+            ax.plot(b[:, 3], b[:, 5], "-", color=c, lw=1.0)
+        ax.plot(a[0, 3], a[0, 5], "o", mfc="white", mec="black", ms=5, mew=1.0)
+    for i, ax in enumerate(axes):
+        ax.set_xlabel("R [a]")
+        if i == 0:
+            ax.set_ylabel("Z [a]")
+    span = f"{len(a)} samples over t = {a[-1, 0]:g} $\\tau_c$" if dt_out else ""
+    fig.suptitle(f"Guiding-centre orbits, dopri5 rtol {rtol:.0e} (finest): line = first "
+                 f"{2 * t_orbit:.2g} $\\tau_c$ (2 transits, 200 samples each), dots = {span}"
+                 f"\nopen circle: start; +: magnetic axis (3.10, 0.33)", fontsize=9)
     fig.savefig(path, dpi=150)
     plt.close(fig)
 
@@ -140,7 +173,7 @@ def main():
     error_time_plot(rows, "dopri5", "rtol", lambda v: f"rtol {v:.0e}",
                     "dopri5: tolerance rtol (atol = 0.01 rtol)", figs / "error_time_dopri5.png", T_ORBIT)
     error_vs_cost(rows, figs / "error_vs_cost.png")
-    orbits(rows, figs / "orbits.png")
+    orbits(rows, figs / "orbits.png", T_ORBIT)
     print(f"figures in {figs}")
 
 

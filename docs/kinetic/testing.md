@@ -97,7 +97,7 @@ Each "pass" follows from what the case runs, so none of them is a blind spot.
 `conservation_scan/check.py` runs `single_particle` for five test particles
 (`conservation_scan/particles.txt`: passing, counter-passing, barely passing,
 trapped) with collisions off, `alpha0 = 0` and the static toroidal
-`E_phi = E_0 R_a / R` (`E_0 = 77`), over 3 poloidal transits, for two rk4 steps
+`E_phi = E_0 R_a / R` (`E_0 = 77`), over 300 poloidal transits (0.0315 tau_c), for two rk4 steps
 and two dopri5 tolerances, in three fields (`SingleParticle/field_source`):
 
 - `analytic`: `AnalyticFieldEvaluator`, an exact large-aspect-ratio field
@@ -112,7 +112,8 @@ against the bounds in `check.py`. With a static field both are exact invariants
 of the guiding-centre equations.
 
 `conservation_scan/scan.py` is the full study (6 rk4 steps, 7 dopri5
-tolerances, 10 transits) with plots of the error against time per integrator.
+tolerances, 100 transits of the reference orbit, 1.05e-4 tau_c each)
+with plots of the error against time per integrator.
 
 ### Why the GCE uses curl B and not the MHD J
 
@@ -122,7 +123,7 @@ equations use. The stored MHD current is the solver's own mimetic curl on the
 staggered grid, averaged to cell centres; in `fields.h5` it differs from the
 cell-centred curl of the cell-centred B by up to 0.7% of max J_phi, and by about
 1% of |B| after interpolation. With it, p_phi drifted secularly by up to
-5e-4 per tau_c (1.5e-3 over 10 transits) for passing particles, independent of
+5e-4 per tau_c (1.5e-3 over 0.28 tau_c, about 2700 transits) for passing particles, independent of
 integrator and step size. `FieldEvaluator` now also returns `curlB`, the curl
 of the interpolated B at the evaluation point, and the GCE uses it; the drift is
 then 1e-8 .. 1e-11 (integration error). The MHD J is still used where the

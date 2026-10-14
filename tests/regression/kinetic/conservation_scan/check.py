@@ -4,7 +4,7 @@
     check.py --exe build/bin/single_particle
 
 Runs scan.py --quick (2 rk4 and 2 dopri5 settings) for each field source over
-3 poloidal transits, collisions off, alpha0 = 0, E_0 = 77, and checks the
+300 poloidal transits (0.0315 tau_c), collisions off, alpha0 = 0, E_0 = 77, and checks the
 largest end-of-run relative error over all particles at the finer setting of
 each integrator:
 
@@ -41,7 +41,7 @@ def main():
     for field, (b_pphi, b_mu) in BOUNDS.items():
         out = base / field
         subprocess.run([sys.executable, str(HERE / "scan.py"), "--exe", args.exe, "--out", str(out),
-                        "--orbits", "3", "--quick", "--no-plot", "--field", field],
+                        "--orbits", "300", "--quick", "--no-plot", "--field", field],
                        check=True, stdout=subprocess.DEVNULL)
         rows = list(csv.DictReader(open(out / "summary.csv")))
         failed = [r for r in rows if r["failed"] != "0"]

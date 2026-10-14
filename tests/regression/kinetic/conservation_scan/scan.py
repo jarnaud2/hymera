@@ -9,7 +9,7 @@ HijackEField writes. Each run writes (t, p, xi, R, phi, Z, p_phi, mu) every
 dt_out; p_phi includes the toroidal-impulse term t c_aw0 E_phi R, so with a
 static B both p_phi and mu are invariants of the exact guiding-centre motion.
 
-    scan.py --exe build/bin/single_particle --out DIR [--orbits 10] [--quick]
+    scan.py --exe build/bin/single_particle --out DIR [--orbits 100] [--quick]
             [--field grid|analytic|analytic_grid] [--E0 77]
 
 --field grid (default) uses the MHD fixture; analytic the exact
@@ -44,9 +44,11 @@ ATOL_OVER_RTOL = 1e-2
 QUICK_RK4_H = [5e-7, 2.5e-7]
 QUICK_DOPRI5_RTOL = [1e-11, 1e-12]
 
-# Poloidal transit time of the reference orbit (passing_hi), measured with
-# dopri5 rtol=1e-12: 0.028 tau_c.
-T_ORBIT = 0.028
+# Poloidal transit time of the reference orbit (passing_hi, p = 15, xi = 0.9),
+# measured with dopri5 rtol=1e-12 at 5e-6 tau_c sampling as the time at which
+# the poloidal angle about the axis (3.10, 0.33) has turned by 2 pi: 1.05e-4 tau_c.
+# (passing_lo: 1.30e-4; the trapped bounce period is ~3.2e-4.)
+T_ORBIT = 1.05e-4
 
 
 def read_particles(path):
@@ -70,6 +72,11 @@ def settings(quick):
 
 
 def run_one(exe, launch, work, part, over, tlim, dt_out, threads, field, E0):
+    # Parthenon step: dt_out rounded down to a whole multiple of the largest rk4
+    # step, at least that step. Outputs then fall on step boundaries.
+    # Below that (fine orbit sampling) the step is dt_out itself.
+    h_max = max(RK4_H)
+    dt_step = max(h_max, h_max * int(dt_out / h_max)) if dt_out >= h_max else dt_out
     run = work / "r1" / "r2"
     if work.exists():
         shutil.rmtree(work)
@@ -81,7 +88,10 @@ def run_one(exe, launch, work, part, over, tlim, dt_out, threads, field, E0):
         "Simulation/EnableSmallAngleCollisions": 0,
         "Simulation/EnableLargeAngleCollisions": 0,
         "Simulation/verbosity": "quiet",
-        "parthenon/time/dt_force": dt_out,
+        # single_particle pushes one Parthenon step of dt_force per step, so
+        # the integrator step is capped at dt_force: keep it a whole multiple of
+        # the largest hRK so that every rk4 step size in RK4_H is the one used.
+        "parthenon/time/dt_force": dt_step,
         "parthenon/time/tlim": tlim,
         # single_particle appends one row per Parthenon output, so the output
         # cadence is the sampling of the conservation series.
@@ -130,8 +140,11 @@ def main():
     ap.add_argument("--exe", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--particles", type=Path, default=HERE / "particles.txt")
-    ap.add_argument("--orbits", type=float, default=10.0, help="run length in poloidal transit times")
-    ap.add_argument("--points-per-orbit", type=int, default=200)
+    ap.add_argument("--orbits", type=float, default=100.0,
+                    help="run length in poloidal transits of the reference orbit (T_ORBIT)")
+    ap.add_argument("--points-per-orbit", type=int, default=12,
+                    help="output samples per transit (also the orbit-plot resolution); "
+                         "dt_out = T_ORBIT / this must be >= the largest rk4 step (8e-6)")
     ap.add_argument("--launch", default="mpirun -n 1" if shutil.which("mpirun") else "",
                     help='launcher prefix, e.g. "srun -n 1" or ""')
     ap.add_argument("--threads", type=int, default=1)
@@ -163,6 +176,14 @@ def main():
             status = "FAILED" if row["failed"] else (
                 f"dp_phi {m['max_dpphi']:.2e}  dmu {m['max_dmu']:.2e}")
             print(f"{integ:6s} {label:12s} {part['name']:12s} {wall:7.2f}s  {status}", flush=True)
+    # Finely sampled first transits for the orbit figure: dopri5 at the finest
+    # tolerance, 2 transits at 200 samples per transit.
+    fine = settings(args.quick)[-1]
+    for part in parts:
+        work = args.out / "orbits" / part["name"]
+        run_one(exe, launch, work, part, fine[2], 2 * T_ORBIT, T_ORBIT / 200, args.threads,
+                args.field, args.E0)
+
     keys = ["integrator", "setting", "particle", "hRK", "rtol", "atol", "wall_s", "failed", "rc",
             "rows", "t_end", "max_dpphi", "end_dpphi", "max_dmu", "end_dmu"]
     with open(args.out / "summary.csv", "w", newline="") as f:
