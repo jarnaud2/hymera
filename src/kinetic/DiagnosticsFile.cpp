@@ -14,6 +14,7 @@
 #include "kinetic/DiagnosticsFile.hpp"
 
 #include <H5Cpp.h>
+#include <filesystem>
 #include <format>
 #include <stdexcept>
 #include <globals.hpp>
@@ -93,7 +94,9 @@ void DiagnosticsFile::Open(const std::string &problem_id, bool is_restart) {
   const std::string name = problem_id + ".diag.h5";
 
   auto impl = std::make_unique<Impl>();
-  const bool reopened = is_restart && H5::H5File::isHdf5(name);
+  // Check existence first: H5File::isHdf5 on a missing file reports an HDF5
+  // error, which Parthenon's HDF5 error handler turns into an abort.
+  const bool reopened = is_restart && std::filesystem::exists(name) && H5::H5File::isHdf5(name);
   impl->file = H5::H5File(name, reopened ? H5F_ACC_RDWR : H5F_ACC_TRUNC);
   H5::Group meta = OpenOrCreateGroup(impl->file, "meta");
   WriteStringAttr(meta, "problem_id", problem_id);
