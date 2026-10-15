@@ -4,6 +4,10 @@
 
 TaskStatus CommunicateBJV(FieldData_t data, User *p_mhd_config, int component0) {
 
+  // Only 9 of the components are written here; bring the others (e.g. the
+  // E computed on the device for the other time level) to the host first, or
+  // the next sync_device would overwrite them with stale host values.
+  data.data.sync_host();
   auto field_h = data.data.view_host();
 
   auto B_h = Kokkos::subview(field_h, Kokkos::ALL, Kokkos::ALL,
