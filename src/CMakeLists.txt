@@ -74,6 +74,7 @@ set(HYBRID_SRC_LIST
 
 set(AVALANCHE_SRC_LIST
   kinetic/AvalancheDriver.cpp
+  kinetic/AvalancheSetup.cpp
   kinetic/avalanche.cpp
 )
 

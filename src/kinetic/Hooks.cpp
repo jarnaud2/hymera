@@ -96,7 +96,10 @@ TaskStatus HijackEField(Mesh * pm) {
   auto data = pkg->Param<FieldData_t>("FieldData");
   auto cdg  = pkg->Param<ConfigurationDomainGeometry>("CDG");
 
-  const Real E_0 = pkg->Param<Real>("E_0");
+  // E_0_exact: the real-valued Avalanche/E_0 of the avalanche field sources;
+  // otherwise the Deck E_0 (AnalyticField/E_0, read as an integer).
+  const Real E_0 = pkg->AllParams().hasKey("E_0_exact") ? pkg->Param<Real>("E_0_exact")
+                                                        : pkg->Param<Real>("E_0");
   const Real R_a = 3.0;
 
   const int NR = cdg.indicator_locator.nR;

@@ -8,6 +8,7 @@
 #include "kinetic/LargeAngleCollision.hpp"
 #include "kinetic/SmallAngleCollision.hpp"
 #include "kinetic/FieldEvaluator.hpp"
+#include "kinetic/AnalyticFieldEvaluator.hpp"
 #include "kinetic/GuidingCenterEquations.hpp"
 #include "kinetic/CurrentDensity.hpp"
 #include "kinetic/rk45.hpp"
@@ -54,8 +55,11 @@ static void ParticleLoop(const std::shared_ptr<StateDescriptor> &pkg, const int 
                        DevExecSpace(), 0, max_index, body);
 }
 
-template <int METHOD>
-static TaskStatus PushParticlesImpl(Mesh *pm, Real t0, Real dt) {
+// The push of every alive particle over [t0, t0 + dt] in field f, checked by
+// ver after each step. Deposit = false skips the current deposit (no grid).
+template <int METHOD, bool Deposit, class Field, class Ver>
+static TaskStatus PushParticlesImpl(Mesh *pm, Real t0, Real dt, const Field &f,
+                                    const Ver &ver) {
 
   // get mesh data
   auto md = pm->mesh_data.Get();
@@ -67,7 +71,6 @@ static TaskStatus PushParticlesImpl(Mesh *pm, Real t0, Real dt) {
   auto rng_pool = pkg->Param<Kinetic::RNGPool>("rng_pool");
 
   const auto gamma_min = pkg->Param<Real>("gamma_min");
-  const auto p_BC =      pkg->Param<Real>("p_BC");
   const auto p_RE =      pkg->Param<Real>("p_RE");
 
   const auto ms = pkg->Param<MollerSource>("MollerSource");
@@ -84,11 +87,8 @@ static TaskStatus PushParticlesImpl(Mesh *pm, Real t0, Real dt) {
   const auto alpha0 = pkg->Param<Real>("alpha0");
 
 
-  auto data = pkg->Param<Kinetic::FieldData_t>("FieldData");
   auto cdg = pkg->Param<ConfigurationDomainGeometry>("CDG");
-  Kinetic::FieldEvaluator f{cdg.hermite_locator, data.hermite_data.view_device()};
-  GuidingCenterEquations<decltype(f), true, false> gce(f, c_aw0, ct_a, alpha0);
-  ParticleVerificator ver{cdg, p_BC};
+  GuidingCenterEquations<Field, true, false> gce(f, c_aw0, ct_a, alpha0);
 
   Kokkos::Timer timer;
 
@@ -128,6 +128,11 @@ static TaskStatus PushParticlesImpl(Mesh *pm, Real t0, Real dt) {
           X[4] = pack_swarm_r(b, Kinetic::Z(), n);
           Real w = pack_swarm_r(b, Kinetic::weight(), n);
           Kokkos::Array<Dim5, WorkSize<METHOD>::value> work_d;
+          // Captured here, not first inside if constexpr (not allowed by nvcc
+          // for extended lambdas).
+          const auto &jre_c = jre;
+          const auto &loc_c = cdg.indicator_locator;
+          const Real p_RE_c = p_RE;
 
           bool last_step = false;
 
@@ -145,7 +150,7 @@ static TaskStatus PushParticlesImpl(Mesh *pm, Real t0, Real dt) {
 
             auto ret = StepParticle<METHOD>(gce, ver, X, t, dtSA, rtol, atol, h,
                                             work_d);
-            if (ret != ParticleVerificator::Success) {
+            if (ret != Ver::Success) {
 
               pack_swarm_i(b, Kinetic::status(), n) &= ~Kinetic::ALIVE;
               swarm_d.MarkParticleForRemoval(n);
@@ -157,8 +162,10 @@ static TaskStatus PushParticlesImpl(Mesh *pm, Real t0, Real dt) {
               break;
             }
 
-            if (X[0] > p_RE) {
-              DepositCurrent(X, t, w, jre, dtSA, f, cdg.indicator_locator);
+            if constexpr (Deposit) {
+              if (X[0] > p_RE_c) {
+                DepositCurrent(X, t, w, jre_c, dtSA, gce.field, loc_c);
+              }
             }
             if (EnableSmallAngleCollisions == 1) {
               sa(X[0], X[1], dtSA, rng_pool);
@@ -191,11 +198,29 @@ static TaskStatus PushParticlesImpl(Mesh *pm, Real t0, Real dt) {
 // Simulation/integrator param. Branching here (host side) rather than inside the
 // kernel means each stepper compiles to its own kernel with its own minimal work
 // array — the DP45 kernel's register cost is not paid on RK4 runs and vice versa.
+//
+// With the Deck param "analytic_field" (set by `avalanche` with
+// Simulation/field_source=analytic) the push uses the exact
+// AnalyticFieldEvaluator, the wall-free OpenDomain check and no current deposit.
+template <int METHOD>
+static TaskStatus PushParticlesIn(Mesh *pm, Real t0, Real dt) {
+  auto pkg = pm->packages.Get("Deck");
+  const Real p_BC = pkg->Param<Real>("p_BC");
+  if (pkg->AllParams().hasKey("analytic_field")) {
+    const auto af = pkg->Param<Kinetic::AnalyticFieldEvaluator>("analytic_field");
+    return PushParticlesImpl<METHOD, false>(pm, t0, dt, af, Kinetic::OpenDomain{p_BC});
+  }
+  auto data = pkg->Param<Kinetic::FieldData_t>("FieldData");
+  auto cdg = pkg->Param<ConfigurationDomainGeometry>("CDG");
+  Kinetic::FieldEvaluator f{cdg.hermite_locator, data.hermite_data.view_device()};
+  return PushParticlesImpl<METHOD, true>(pm, t0, dt, f, ParticleVerificator{cdg, p_BC});
+}
+
 TaskStatus PushParticles(Mesh *pm, Real t0, Real dt) {
   const int integrator = pm->packages.Get("Deck")->Param<int>("integrator");
   if (integrator == INTEGRATOR_RK4)
-    return PushParticlesImpl<INTEGRATOR_RK4>(pm, t0, dt);
-  return PushParticlesImpl<INTEGRATOR_DOPRI5>(pm, t0, dt);
+    return PushParticlesIn<INTEGRATOR_RK4>(pm, t0, dt);
+  return PushParticlesIn<INTEGRATOR_DOPRI5>(pm, t0, dt);
 }
 
 // Compute the two guiding-center adiabatic invariants (canonical toroidal

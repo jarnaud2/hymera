@@ -55,25 +55,6 @@ struct GridPsi {
   }
 };
 
-// Particle check for the analytic field, which has no wall: finiteness and the
-// momentum cutoff only.
-struct OpenDomain {
-  using ResultCode_t = int;
-  static constexpr ResultCode_t Success = ParticleVerifyCodes::Success;
-  Real p_BC;
-  KOKKOS_INLINE_FUNCTION ResultCode_t verify(const Dim5 &y) const {
-    if (!Kokkos::isfinite(y[0]) || !Kokkos::isfinite(y[2]) || !Kokkos::isfinite(y[4]))
-      return ParticleVerifyCodes::InvalidState;
-    return y[0] < p_BC ? ParticleVerifyCodes::MomentumCutoff : ParticleVerifyCodes::Success;
-  }
-};
-
-// psi of the analytic field.
-struct AnalyticPsi {
-  AnalyticFieldEvaluator f;
-  KOKKOS_INLINE_FUNCTION Real operator()(Real R, Real Z) const { return f.psi(R, Z); }
-};
-
 // One collisionless push of state over [t, t + dt] in field f, an optional
 // small-angle kick, then (p_phi, mu) at the end. Runs a 1-element device kernel,
 // so the same device-side code as the swarm push (StepParticle, small-angle

@@ -18,5 +18,7 @@
 
 void GenerateParticleCurrentDensity(parthenon::MeshBlock *pmb, parthenon::ParameterInput *pin);
 void GenerateParticlePoint(parthenon::MeshBlock *pmb, parthenon::ParameterInput *pin);
+/// Ring of radius Deck/seed_r0 around the magnetic axis (fig11a avalanche benchmark).
+void GenerateParticleRing(parthenon::MeshBlock *pmb, parthenon::ParameterInput *pin);
 
 #endif // _PGEN_HPP_

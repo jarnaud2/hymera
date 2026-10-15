@@ -1,16 +1,7 @@
-
-//========================================================================================
-// (C) (or copyright) 2025. Triad National Security, LLC. All rights reserved.
-//
-// This program was produced under U.S. Government contract 89233218CNA000001 for Los
-// Alamos National Laboratory (LANL), which is operated by Triad National Security, LLC // for the U.S. Department of Energy/National Nuclear Security Administration. All rights
-// in the program are reserved by Triad National Security, LLC, and the U.S. Department
-// of Energy/National Nuclear Security Administration. The Government is granted for
-// itself and others acting on its behalf a nonexclusive, paid-up, irrevocable worldwide
-// license in this material to reproduce, prepare derivative works, distribute copies to
-// the public, perform publicly and display publicly, and to permit others to do so.
-//========================================================================================
 #pragma once
+#include <memory>
+#include <string>
+
 #include <parthenon/driver.hpp>
 #include "mhd.h"
 
@@ -25,5 +16,25 @@ public:
   TaskCollection MakeTaskCollection(BlockList_t &blocks, SimTime tm);
   TaskListStatus Step();
 };
-}
 
+/// Options of the `avalanche` executable, read from <Avalanche> (see avalanche.cpp).
+struct AvalancheOptions {
+  std::string field_source;  ///< mhd | analytic | file
+  std::string seed;          ///< point | ring | surface
+  static AvalancheOptions FromInput(ParameterInput *pin);
+};
+
+/// Adds the Deck params of the non-MHD field sources: the seed ring radius, the
+/// exact (real-valued) E_0, the analytic field and the surface target.
+void AddAvalancheParams(ParameterInput *pin, const AvalancheOptions &opt,
+                        std::shared_ptr<StateDescriptor> &pkg);
+
+/// After the fields are loaded: moves surface seeds to their flux surface,
+/// checks the seed pitch sign against E and B, and declares the
+/// /timeseries/avalanche series.
+void PrepareAvalancheSeeds(Mesh *pm, const AvalancheOptions &opt);
+
+/// Appends (t, N_alive, W_alive) to /timeseries/avalanche.
+void AppendAvalancheRow(Mesh *pm, SimTime const &tm);
+
+}

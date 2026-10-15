@@ -29,7 +29,11 @@
 #include <Kokkos_Core.hpp>
 #include <hFlux/hFlux.hpp>
 
+#include <parthenon/package.hpp>
+
 #include "kinetic/FieldEvaluator.hpp"
+#include "kinetic/ParticleVerificator.hpp"
+#include "kinetic/kinetic.hpp"
 
 namespace Kinetic {
 
@@ -91,6 +95,35 @@ struct AnalyticFieldEvaluator {
 } // namespace Kinetic
 
 namespace Kinetic {
+
+/// Particle check for the analytic field, which has no wall: finiteness and the
+/// momentum cutoff only.
+struct OpenDomain {
+  using ResultCode_t = int;
+  static constexpr ResultCode_t Success = ParticleVerifyCodes::Success;
+  Real p_BC;
+  KOKKOS_INLINE_FUNCTION ResultCode_t verify(const Dim5 &y) const {
+    if (!Kokkos::isfinite(y[0]) || !Kokkos::isfinite(y[2]) || !Kokkos::isfinite(y[4]))
+      return ParticleVerifyCodes::InvalidState;
+    return y[0] < p_BC ? ParticleVerifyCodes::MomentumCutoff : ParticleVerifyCodes::Success;
+  }
+};
+
+/// psi of the analytic field.
+struct AnalyticPsi {
+  AnalyticFieldEvaluator f;
+  KOKKOS_INLINE_FUNCTION Real operator()(Real R, Real Z) const { return f.psi(R, Z); }
+};
+
+/// The AnalyticField/q0, q2, R_a, B0 parameters with E_0 given by the caller.
+/// The defaults of R_a and B0 differ between executables, so they are passed in.
+inline AnalyticFieldEvaluator ReadAnalyticField(parthenon::ParameterInput *pin, Real E_0,
+                                                Real R_a_default, Real B0_default) {
+  return AnalyticFieldEvaluator{pin->GetOrAddReal("AnalyticField", "q0", 2.1),
+                                pin->GetOrAddReal("AnalyticField", "q2", 2.0),
+                                pin->GetOrAddReal("AnalyticField", "R_a", R_a_default),
+                                pin->GetOrAddReal("AnalyticField", "B0", B0_default), E_0};
+}
 
 /// Test path for `single_particle`, SingleParticle/field_source=analytic_grid:
 /// sample AnalyticFieldEvaluator onto the field grid with the storage

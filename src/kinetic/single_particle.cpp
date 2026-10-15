@@ -66,13 +66,8 @@ int main(int argc, char *argv[]) {
     // users, since the GCE always uses the pointwise curl of B).
     const std::string gridJ = pin->GetOrAddString("SingleParticle", "grid_J", "data");
     pkg->AddParam("sp_grid_J_curlB", gridJ == "curlB" ? 1 : 0);
-    Kinetic::AnalyticFieldEvaluator af{
-        pin->GetOrAddReal("AnalyticField", "q0", 2.1),
-        pin->GetOrAddReal("AnalyticField", "q2", 2.0),
-        pin->GetOrAddReal("AnalyticField", "R_a", 3.1),
-        pin->GetOrAddReal("AnalyticField", "B0", -1.0),
-        pkg->Param<Real>("E_0")};
-    pkg->AddParam("sp_analytic_field", af);
+    pkg->AddParam("sp_analytic_field",
+                  Kinetic::ReadAnalyticField(pin.get(), pkg->Param<Real>("E_0"), 3.1, -1.0));
     packages.Add(pkg);
     return packages;
   };

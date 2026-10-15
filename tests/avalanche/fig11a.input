@@ -1,0 +1,113 @@
+# ========================================================================================
+#  (C) (or copyright) 2024. Triad National Security, LLC. All rights reserved.
+# ========================================================================================
+# fig11a avalanche benchmark on the exact analytic field (no MHD, no grid).
+# The deck of the reference run fig11a_20k_33 (tests/avalanche/*.phdf), with
+#   Avalanche/field_source = analytic, Avalanche/seed = ring
+# Per run the table in run_fig11a.sh sets Avalanche/E_0, ParticleSeed/r_0,
+# parthenon/time/tlim and dt_force = output2/dt = tlim / 100.
+
+<parthenon/job>
+problem_id = fig11a
+
+<parthenon/mesh>
+nx1 = 256
+x1min = 0.0
+x1max = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 1
+x2min = -2.0
+x2max = 2.0
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+pack_size = -1
+
+<parthenon/meshblock>
+nx1 = 32
+
+<Avalanche>
+field_source = analytic
+seed = ring
+# Real-valued E_0 (AnalyticField/E_0 is read as an integer elsewhere)
+E_0 = 36.694677871148464
+
+<Geometry>
+input_file = ../../inputs/AxisSymmetricGeometry.dat
+
+<parthenon/time>
+dt_force = 0.3523275062237474e-2
+tlim = 0.3523275062237474
+
+<Time>
+nCD = 1
+dtLA_over_tauC = 1e-5
+
+<ParticleSeed>
+num_particles_per_block = 1024
+MaxParticles = 20000
+rng_seed = 1234
+ximin = -0.95
+ximax = -0.85
+r_0 = 0.6
+
+<Simulation>
+EnableLargeAngleCollisions = 1
+EnableSmallAngleCollisions = 1
+EnableComputeConservedQuantities = 0
+integrator = rk4
+hRK = 1e-5
+atol = 1e-10
+rtol = 1e-9
+parallel_push = 1
+verbosity = info
+
+<Plasma>
+Rc = 3.0
+Zc = 0.0
+Coulog0 = 10.0
+Zeff = 1.0
+fI = 1.0
+Z0 = 18.
+ZI = 1.
+
+<GuidingCenterEquations>
+ct_a = 5.e5
+c_aw0 = 1.608027383346224e-5
+alpha0 = 0.05
+
+<Collisions>
+c_vTe = 357.142857
+k = 5.0
+aI = 0.3285296762792767
+II = 4.295499e-4
+
+<Reference>
+B0 = 53.
+a = 2.0
+
+<BoundaryConditions>
+gamma_min = 1.02
+gamma_BC = 1.02
+
+<AnalyticField>
+q0 = 2.1
+q2 = 2.0
+R_a = 3.0
+B0 = 1.0
+
+<Output>
+plot_fields = 0
+
+<parthenon/output2>
+file_type = hdf5
+write_xdmf = false
+swarms = particles
+particles_variables = particle.weight, particle.status
+dt = 0.3523275062237474e-2
+file_number_width = 6

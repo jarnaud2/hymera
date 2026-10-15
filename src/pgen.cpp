@@ -299,3 +299,72 @@ void GenerateParticlePoint(parthenon::MeshBlock *pmb, parthenon::ParameterInput 
       pack_status(b, Kinetic::status(), n) = Kinetic::ALIVE | Kinetic::PROTECTED;
    });
 }
+
+// Ring seed of the fig11a avalanche benchmark: p and xi uniform as in
+// GenerateParticlePoint, and the poloidal angle theta uniform on the circle of
+// radius ParticleSeed/r_0 around the magnetic axis (Rc, Zc). The draws are made
+// in the order p, xi, theta, as the generator that produced the reference
+// results did. With seed_on_surface the particles are moved later, along the
+// ray at angle theta, to a flux surface (MoveSeedsToFluxSurface).
+void GenerateParticleRing(parthenon::MeshBlock *pmb, parthenon::ParameterInput *pin) {
+  auto &data = pmb->meshblock_data.Get();
+
+  auto pkg = pmb->packages.Get("Deck");
+  const SeedParams sp(pkg);
+  auto rng_pool = sp.rng_pool;
+  const int N = sp.N;
+  const Real pmin = sp.pmin, pmax = sp.pmax, ximin = sp.ximin, ximax = sp.ximax;
+  const Real Rc = sp.Rc, Zc = sp.Zc;
+  const Real r_0 = pkg->Param<Real>("seed_r0");
+
+  auto swarm = data->GetSwarmData()->Get("particles");
+  const BlockCells cells(pmb);
+  auto newParticlesContext = swarm->AddEmptyParticles(N);
+
+  static auto desc_swarm =
+    parthenon::MakeSwarmPackDescriptor<
+    swarm_position::x,
+    swarm_position::y,
+    swarm_position::z,
+    Kinetic::p,
+    Kinetic::xi,
+    Kinetic::R,
+    Kinetic::phi,
+    Kinetic::Z,
+    Kinetic::weight>("particles");
+  static auto desc_markers =
+    parthenon::MakeSwarmPackDescriptor<
+    Kinetic::status
+      >("particles");
+
+  auto pack_swarm = desc_swarm.GetPack(data.get());
+  auto pack_status = desc_markers.GetPack(data.get());
+
+  Kinetic::Log::Debug("Block {}: placing {} particles on the ring r_0 = {} around ({}, {})",
+                      pmb->gid, N, r_0, Rc, Zc);
+
+  parthenon::par_for(DEFAULT_LOOP_PATTERN, PARTHENON_AUTO_LABEL,
+      DevExecSpace(), 0,
+      newParticlesContext.GetNewParticlesMaxIndex(),
+      KOKKOS_LAMBDA(const int new_n) {
+      const int n = newParticlesContext.GetNewParticleIndex(new_n);
+      const int b = 0;
+
+      PlaceInCell(pack_swarm, b, n, cells);
+
+      auto rng_gen = rng_pool.get_state();
+      const Real p = rng_gen.drand(pmin, pmax);
+      const Real xi = rng_gen.drand(ximin, ximax);
+      const Real theta = rng_gen.drand(0.0, 2 * M_PI);
+      rng_pool.free_state(rng_gen);
+
+      pack_swarm(b, Kinetic::p(), n)   = p;
+      pack_swarm(b, Kinetic::xi(), n)  = xi;
+      pack_swarm(b, Kinetic::R(), n)   = Rc + r_0 * Kokkos::cos(theta);
+      pack_swarm(b, Kinetic::phi(), n) = 0.0;
+      pack_swarm(b, Kinetic::Z(), n)   = Zc + r_0 * Kokkos::sin(theta);
+
+      pack_swarm(b, Kinetic::weight(), n) = 1.0;
+      pack_status(b, Kinetic::status(), n) = Kinetic::ALIVE | Kinetic::PROTECTED;
+   });
+}
