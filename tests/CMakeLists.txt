@@ -137,3 +137,11 @@ add_test(NAME kin_gce_conservation
          COMMAND ${KINETIC_HARNESS}/conservation_scan/run_check.sh
                  --exe $<TARGET_FILE:single_particle>)
 set_tests_properties(kin_gce_conservation PROPERTIES LABELS "kinetic" TIMEOUT 1200)
+
+# fig11a avalanche benchmark (tests/avalanche): growth rate on the analytic field
+# against the reference table, 10%. Rows 0 and 9: 26 + 57 min on 6 cores, so it has
+# its own label and is not part of -L kinetic: run with ctest -L avalanche.
+add_test(NAME kin_avalanche_fig11a
+         COMMAND ${CMAKE_SOURCE_DIR}/tests/avalanche/check_fig11a.sh
+                 --exe $<TARGET_FILE:avalanche>)
+set_tests_properties(kin_avalanche_fig11a PROPERTIES LABELS "avalanche" TIMEOUT 10800)

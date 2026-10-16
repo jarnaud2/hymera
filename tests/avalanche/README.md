@@ -62,3 +62,15 @@ psi_n = psi / psi_edge, with psi = 0 on the axis.
 - The analytic field has B_phi > 0, so ξ ∈ [−0.95, −0.85].
 - The MHD fixture has B_phi < 0, so the MHD deck needs ξ ∈ [0.85, 0.95].
 - The run stops at set-up if the sign is wrong.
+
+## ctest
+
+`ctest -L avalanche` runs `kin_avalanche_fig11a`, which is `check_fig11a.sh` on rows
+0 (r_0 = 0, E_0 = 70.5) and 9 (r_0 = 0.2, E_0 = 71.4).
+- Duration: 26 + 57 min on 6 cores.
+- Measured at rk4 hRK = 2e-6: row 0 gives γ = 2.508 (reference 2.502, +0.2%); row 9
+  gives 2.155 (reference 2.135, +0.9%).
+- Seed scatter on row 0 is σ = 1.1% (3 seeds at hRK = 1e-5).
+- Negative test: `--set Simulation/EnableSmallAngleCollisions=0` on row 0 gives
+  γ ≈ −0.6 and fails. Without pitch-angle scattering the beam makes almost no
+  secondaries above gamma_min.
