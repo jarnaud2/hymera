@@ -23,6 +23,7 @@
 //             closest to zero in |psi|
 
 #include <cmath>
+#include <utility>
 #include <limits>
 #include <stdexcept>
 
@@ -148,6 +149,25 @@ void MoveToSurface(Mesh *pm, const PsiFn &psi_n, const InPlasma &in_plasma, Real
       });
 }
 
+// Smallest and largest psi_n over the seeded particles (check of MoveToSurface).
+template <class PsiFn>
+std::pair<Real, Real> SeedPsiRange(Mesh *pm, const PsiFn &psi_n) {
+  auto md = pm->mesh_data.Get();
+  auto desc = parthenon::MakeSwarmPackDescriptor<Kinetic::R, Kinetic::Z>("particles");
+  auto pack = desc.GetPack(md.get());
+  Real lo = 0.0, hi = 0.0;
+  Kokkos::parallel_reduce(PARTHENON_AUTO_LABEL, pack.GetMaxFlatIndex() + 1,
+      KOKKOS_LAMBDA(const int idx, Real &mn, Real &mx) {
+        auto [b, n] = pack.GetBlockParticleIndices(idx);
+        if (!pack.GetContext(b).IsActive(n)) return;
+        const Real v = psi_n(pack(b, Kinetic::R(), n), pack(b, Kinetic::Z(), n));
+        mn = Kokkos::min(mn, v);
+        mx = Kokkos::max(mx, v);
+      },
+      Kokkos::Min<Real>(lo), Kokkos::Max<Real>(hi));
+  return {lo, hi};
+}
+
 // Sign of B_phi * E_phi at a point, and the pitch range check: particles run
 // away against E, so their pitch xi (along b) must have the sign of
 // -B_phi * E_phi.
@@ -222,6 +242,8 @@ void PrepareAvalancheSeeds(Mesh *pm, const AvalancheOptions &opt) {
         return region == 1;
       };
       MoveToSurface(pm, psi_n, inside, Rc, Zc, target, 2.0);
+      const auto [lo, hi] = SeedPsiRange(pm, psi_n);
+      Log::Info("Avalanche: seeds on psi_n in [{:.6f}, {:.6f}] (target {:.6f})", lo, hi, target);
     } else {
       // psi_n = 0: all particles on the magnetic axis.
       auto md = pm->mesh_data.Get();
