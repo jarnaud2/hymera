@@ -51,9 +51,10 @@ def psi_n_of_r0(r0):
     return np.log1p(Q2 * np.asarray(r0) ** 2 / Q0) / np.log1p(Q2 / Q0)
 
 
-def fit_exponential(t, y, g0=0.1):
-    """Least-squares fit of y = exp(g t): Gauss-Newton on sum (exp(g t) - y)^2."""
-    g = g0
+def fit_exponential(t, y, g0=None):
+    """Least-squares fit of y = exp(g t): Gauss-Newton on sum (exp(g t) - y)^2.
+    Starts from the log-linear slope, so large growth does not overflow."""
+    g = g0 if g0 is not None else np.polyfit(t, np.log(np.maximum(y, 1e-300)), 1)[0]
     for _ in range(200):
         e = np.exp(g * t)
         r = e - y
@@ -143,9 +144,9 @@ def main():
         w = csv.DictWriter(f, fieldnames=list(rows[0]))
         w.writeheader()
         w.writerows(rows)
-    bad = [r for r in rows if abs(r["rel"]) > args.tol]
+    bad = [r for r in rows if not abs(r["rel"]) <= args.tol]   # NaN counts as a failure
     for r in rows:
-        print(f"{'FAIL' if abs(r['rel']) > args.tol else 'ok  '} i={r['i']:2d} r0={r['r0']:.1f} "
+        print(f"{'ok  ' if abs(r['rel']) <= args.tol else 'FAIL'} i={r['i']:2d} r0={r['r0']:.1f} "
               f"E0={r['E0']:6.2f} gamma={r['gamma']:.4f} ref={r['gamma_ref']:.4f} "
               f"rel={r['rel']:+.3f} (n_fit {r['n_fit']})")
     print(f"{len(rows) - len(bad)}/{len(rows)} within {args.tol:.0%}")

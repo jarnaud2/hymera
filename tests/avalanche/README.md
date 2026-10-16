@@ -24,7 +24,11 @@ small-angle collisions and large-angle (Møller) collisions.
   - `BoundaryConditions/gamma_min = gamma_BC = 1.02`, the reference values. The code
     default `1 + 1e-4` makes the large-angle sampler about 100× slower, because it
     keeps far fewer of its draws.
-  - `integrator = rk4`, `hRK = 1e-5`. The reference used dopri5 with rtol 1e-9.
+  - `integrator = rk4`, `hRK = 2e-6`. The reference used dopri5 with rtol 1e-9.
+    rk4 at `hRK = 1e-5` is unstable for off-axis orbits. A particle at r = 0.4 loses
+    85% of p_phi in 0.02 τ_c and falls onto the magnetic axis, which inflated γ at
+    r_0 ≥ 0.2 by 20% and more. At 2e-6, p_phi is kept to 4e-4 over that time. rk4 at
+    2e-6 costs 2.7× less than dopri5 at rtol 1e-9.
 - `run_fig11a.sh EXE OUTDIR [--rows "..."] [--set "..."]`: runs table rows. Each row
   sets E_0, r_0 and tlim, with `dt_force = output dt = tlim / 100`. Output goes to
   `OUTDIR/fig11a_<i>/`.
