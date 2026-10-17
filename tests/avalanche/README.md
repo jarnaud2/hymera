@@ -57,6 +57,11 @@ psi_n = psi / psi_edge, with psi = 0 on the axis.
   psi_n(r) = ln(1 + q2 r²/q0) / ln(1 + q2/q0).
 - `file`: psi_edge is psi on the separatrix.
 
+**E on the MHD field.** `HijackEField` sets E_phi = E_0 R_a / R with R_a = 3.
+The MHD axis is at R = 3.10, so E_phi on the axis is 0.968 E_0. With
+`Avalanche/E_axis = axis`, R_a is the magnetic axis of the loaded field, and
+E_phi = E_0 on the axis. The default, `fixed`, keeps R_a = 3.
+
 **Pitch sign.** Runaways move against E, so the sign of ξ (along b) must be
 −sign(B_phi E_phi).
 - The analytic field has B_phi > 0, so ξ ∈ [−0.95, −0.85].

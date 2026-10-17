@@ -100,7 +100,10 @@ TaskStatus HijackEField(Mesh * pm) {
   // otherwise the Deck E_0 (AnalyticField/E_0, read as an integer).
   const Real E_0 = pkg->AllParams().hasKey("E_0_exact") ? pkg->Param<Real>("E_0_exact")
                                                         : pkg->Param<Real>("E_0");
-  const Real R_a = 3.0;
+  // E_phi = E_0 R_a / R with R_a = 3, or, if the Deck param E_R_axis is set
+  // (avalanche, Avalanche/E_axis = axis), R_a = the magnetic axis Rc, so that
+  // E_phi = E_0 on the axis of the loaded field.
+  const Real R_a = pkg->AllParams().hasKey("E_R_axis") ? pkg->Param<Real>("Rc") : 3.0;
 
   const int NR = cdg.indicator_locator.nR;
   const int NZ = cdg.indicator_locator.nZ;

@@ -67,6 +67,12 @@ void AddAvalancheParams(ParameterInput *pin, const AvalancheOptions &opt,
   pkg->AddParam("E_0_exact", E_0);
   pkg->AddParam("seed_r0", pin->GetOrAddReal("ParticleSeed", "r_0", 0.0));
   pkg->AddParam("seed_psi_n", pin->GetOrAddReal("Avalanche", "psi_n", -1.0));
+  // Avalanche/E_axis: fixed (default) puts E_phi = E_0 at R = 3 (HijackEField);
+  // axis puts it at the magnetic axis of the loaded field (file source).
+  const std::string e_axis = pin->GetOrAddString("Avalanche", "E_axis", "fixed");
+  if (e_axis != "fixed" && e_axis != "axis")
+    throw std::invalid_argument("Avalanche/E_axis must be fixed or axis");
+  if (e_axis == "axis") pkg->AddParam("E_R_axis", 1);
   // The analytic q profile also maps the ring radius r_0 to psi_n for the
   // file field source, so that one deck table drives both.
   const auto af = ReadAnalyticField(pin, E_0, 3.0, 1.0);
