@@ -19,7 +19,8 @@ particle of the block).
 
 Writes OUTDIR/gamma.csv and OUTDIR/fig11a_gamma_vs_E0.png (gamma against E_0,
 one colour per r_0; reference open markers, this code filled markers) and
-OUTDIR/fig11a_gamma_vs_psin.png (gamma against normalised flux psi_n).
+OUTDIR/fig11a_gamma_vs_psin.png (the same against E_0, labelled by the
+normalised flux psi_n of the seed surface).
 Exit status 1 if any run is off the reference by more than --tol (relative).
 """
 import argparse
@@ -182,27 +183,23 @@ def plot(rows, ES, R0s, gam_ref, out, label):
     fig.savefig(out / "fig11a_gamma_vs_E0.png", dpi=150)
     plt.close(fig)
 
-    # Same data against the normalised flux of the seed surface, one curve per E_0
-    # row of the table (E_0 changes slightly with r_0 in the reference table, so
-    # rows are grouped by their position in each r_0 block).
+    # The same data with the seed surfaces labelled by their normalised flux, so
+    # that the curves carry over to the MHD field (seeded on the same psi_n).
     fig, ax = plt.subplots(figsize=(7.2, 4.8), constrained_layout=True)
-    nE = int(np.sum(np.isclose(R0s, r0_vals[0])))
-    cm = plt.get_cmap("viridis")
-    for k in range(nE):
-        idx = [k + nE * j for j in range(len(r0_vals))]
-        c = cm(k / max(1, nE - 1))
-        ax.plot(psi_n_of_r0(R0s[idx]), gam_ref[idx], "o--", mfc="none", color=c, lw=0.8, ms=6)
-        mine = sorted((r for r in rows if r["i"] in idx), key=lambda r: r["psi_n"])
-        if mine:
-            ax.plot([r["psi_n"] for r in mine], [r["gamma"] for r in mine], "o-", color=c,
-                    ms=4, lw=1.2, label=f"$E_0$ ≈ {ES[k]:.0f}")
-    ax.plot([], [], "o--", mfc="none", color="0.3", label="reference")
-    ax.plot([], [], "o-", color="0.3", label=label)
-    ax.set_xlabel(r"normalised poloidal flux $\psi_n$ of the seed surface")
-    ax.set_ylabel(r"$\gamma$ [$1/\tau_c$]")
-    ax.set_title(r"fig11a: growth rate against $\psi_n$", loc="left")
+    for r0 in r0_vals:
+        m = np.isclose(R0s, r0)
+        lab = rf"$\psi_n$ = {psi_n_of_r0(r0):.3g}"
+        ax.plot(ES[m], gam_ref[m], "o", mfc="none", mec=colors[r0], ms=7, mew=1.3)
+        mine = [r for r in rows if np.isclose(r["r0"], r0)]
+        ax.plot([r["E0"] for r in mine], [r["gamma"] for r in mine], "o",
+                color=colors[r0], ms=4.5, label=lab)
+    ax.plot([], [], "o", mfc="none", mec="0.3", label="reference (fig11a.jld2)")
+    ax.plot([], [], "o", color="0.3", ms=4.5, label=label)
+    ax.set_xlabel(r"$E_0$")
+    ax.set_ylabel(r"avalanche growth rate $\gamma$ [$1/\tau_c$]")
+    ax.set_title(r"fig11a: growth rate by seed flux surface $\psi_n$", loc="left")
     ax.grid(True, alpha=0.3)
-    ax.legend(fontsize=7, ncol=2)
+    ax.legend(fontsize=8, loc="upper left")
     fig.savefig(out / "fig11a_gamma_vs_psin.png", dpi=150)
     plt.close(fig)
     print(f"figures in {out}")

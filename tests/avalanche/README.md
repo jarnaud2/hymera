@@ -91,3 +91,22 @@ time of each row. The figures are `fig11a_baseline_gamma_vs_E0.png` and
 - 44/45 rows are within 10%. Row 8 (r_0 = 0, E_0 = 22.5) is −10.6%. It was also −8%
   with rk4 at 1e-5 and −9% with rk4 at 2e-6. On the axis there is no orbit to drift,
   so this difference is not from the integrator.
+
+## Large-angle step
+
+`run_fig11a.sh --la-growth G` sets the large-angle step to dtLA = G / γ_ref, the step
+over which the expected growth is G, capped at the force step. The reference table
+has γ_ref·dt_force = 0.092 in every row. Measured on the analytic field (rk4 hRK =
+2e-6; local, 3 threads per run):
+
+| G | nLA | row 0 γ (ref 2.502) | row 9 γ (ref 2.135) | wall time, rows 0 + 9 |
+|---|---|---|---|---|
+| baseline, dtLA = 1e-5 τ_c | 3682, 4313 | 2.507 | 2.160 | (6 threads: 1536 s + 3424 s) |
+| 0.01 | 10 | 2.497 (−0.2%) | 2.141 (+0.3%) | 3888 s + 2975 s |
+| 0.1 | 2 | 2.488 (−0.5%) | 2.075 (−2.9%) | 2900 s + 2578 s |
+
+- G = 0.01 (1% growth per step) agrees with the baseline within the seed scatter.
+- G = 0.1 is 4% low at r_0 = 0.2. A particle makes at most one secondary per
+  large-angle step, which caps the growth when that probability is not small.
+- On the CPU the run time hardly depends on dtLA. The cost is the rk4 push itself,
+  about 1.8e6 steps per particle per row.
