@@ -79,3 +79,15 @@ E_phi = E_0 on the axis. The default, `fixed`, keeps R_a = 3.
 - Negative test: `--set Simulation/EnableSmallAngleCollisions=0` on row 0 gives
   γ ≈ −0.6 and fails. Without pitch-angle scattering the beam makes almost no
   secondaries above gamma_min.
+
+## Analytic baseline
+
+`baseline_analytic.csv` holds the γ of all 45 rows, with the integrator and the wall
+time of each row. The figures are `fig11a_baseline_gamma_vs_E0.png` and
+`fig11a_baseline_gamma_vs_psin.png`.
+- Integrators: rk4 hRK = 2e-6 for 35 rows; dopri5 rtol 1e-9 for the 10 lowest-E_0
+  rows (two per r_0). Those runs last up to 70 τ_c, and rk4 at 2e-6 drifts p_phi
+  4% per 2 τ_c there.
+- 44/45 rows are within 10%. Row 8 (r_0 = 0, E_0 = 22.5) is −10.6%. It was also −8%
+  with rk4 at 1e-5 and −9% with rk4 at 2e-6. On the axis there is no orbit to drift,
+  so this difference is not from the integrator.
