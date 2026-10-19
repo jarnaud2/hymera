@@ -386,16 +386,18 @@ namespace Kinetic {
 //   E_phi, E_par    from the interpolated field
 //   E_ohm = En eta_norm J_phi, with J the MHD current (the resistive part of
 //                   Ohm's law as ComputeBaseElectricField builds it)
-//   E_re  = En J_re,phi, with J_re the runaway current handed to the MHD
-//                   solve (Jre_mhd, nearest grid row), the part subtracted in
-//                   ComputeAdjustedElectricField
+//   E_re  = En J_re,phi, with J_re the runaway current of the last MHD step
+//                   as handed to the MHD solve (Jre_last, nearest grid row),
+//                   the part subtracted in ComputeAdjustedElectricField
 // and J_phi, J_re,phi in their own normalisations.
 void WriteMidplaneProfile(Mesh *pm, SimTime const &tm) {
   auto *diag = DiagnosticsFile::Get();
   auto pkg = pm->packages.Get("Deck");
   auto data = pkg->Param<FieldData_t>("FieldData");
   auto cdg = pkg->Param<ConfigurationDomainGeometry>("CDG");
-  auto Jre_mhd = pkg->Param<DualView3>("Jre_mhd");
+  // This MHD step's runaway current (Jre_last, kept before the corrector zeroes
+  // Jre_mhd); hybrid registers it with Hybrid/midplane_profile = 1.
+  auto jre = pkg->Param<View3>("Jre_last");
   const Real Zc = pkg->Param<Real>("Zc");
   const Real En = pkg->Param<Real>("En");
   const Real eta_norm = pkg->Param<Real>("eta_norm");
@@ -407,9 +409,7 @@ void WriteMidplaneProfile(Mesh *pm, SimTime const &tm) {
   const Real dR = (hl.nR * hl.dR - 2e-10) / (N - 1);
 
   data.hermite_data.sync_device();
-  Jre_mhd.sync_device();
   FieldEvaluator f{cdg.hermite_locator, data.hermite_data.view_device()};
-  auto jre = Jre_mhd.view_device();
   int jz = static_cast<int>(Kokkos::round((Zc - il.Z0) / il.dZ));
   jz = jz < 0 ? 0 : (jz >= il.nZ ? il.nZ - 1 : jz);
 

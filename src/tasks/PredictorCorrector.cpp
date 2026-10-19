@@ -37,6 +37,16 @@ void AttachFieldCorrector(TaskList* tl, TaskID& dep,
 
   auto pkg = pm->packages.Get("Deck");
   auto Jre_mhd = pkg->Param<DualView3>("Jre_mhd");
+  // Keep this step's runaway current for the output diagnostics (Jre_last, set
+  // by hybrid with Hybrid/midplane_profile = 1): the corrector zeroes Jre_mhd.
+  if (pkg->AllParams().hasKey("Jre_last")) {
+    auto last = pkg->Param<View3>("Jre_last");
+    dep = tl->AddTask(dep, [Jre_mhd, last]() mutable {
+      Jre_mhd.sync_device();
+      Kokkos::deep_copy(last, Jre_mhd.view_device());
+      return TaskStatus::complete;
+    });
+  }
   dep = tl->AddTask(dep, AdvanceBackgroundFields, p_mhd_config, Jre_mhd);
 }
 

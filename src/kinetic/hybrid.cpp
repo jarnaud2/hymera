@@ -41,6 +41,10 @@ int main(int argc, char *argv[]) {
     auto pkg = Kinetic::Initialize(pin.get(), p_mhd_config);
     if (dyn_gmin == 1)
       pkg->AddParam("gamma_min_dyn", pkg->Param<Real>("gamma_min"), Params::Mutability::Mutable);
+    if (midplane == 1) {
+      const auto j = pkg->Param<DualView3>("Jre_mhd");
+      pkg->AddParam("Jre_last", View3("Jre_last", j.extent(0), j.extent(1)));
+    }
     packages.Add(pkg);
     return packages;
   };
