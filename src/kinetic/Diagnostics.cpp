@@ -377,3 +377,67 @@ TaskStatus MakeOutputs(Mesh* pmesh, int cycle, int iCD, int iLA, Real t_in_step)
 }
 
 } // namespace Kinetic
+
+namespace Kinetic {
+
+// Radial profile through the magnetic axis, Z = Zc, written at each output to
+// /profiles/midplane_c<cycle> of the diagnostics file (hybrid, with
+// Hybrid/midplane_profile = 1). In the units of the kinetic E (E_c):
+//   E_phi, E_par    from the interpolated field
+//   E_ohm = En eta_norm J_phi, with J the MHD current (the resistive part of
+//                   Ohm's law as ComputeBaseElectricField builds it)
+//   E_re  = En J_re,phi, with J_re the runaway current handed to the MHD
+//                   solve (Jre_mhd, nearest grid row), the part subtracted in
+//                   ComputeAdjustedElectricField
+// and J_phi, J_re,phi in their own normalisations.
+void WriteMidplaneProfile(Mesh *pm, SimTime const &tm) {
+  auto *diag = DiagnosticsFile::Get();
+  auto pkg = pm->packages.Get("Deck");
+  auto data = pkg->Param<FieldData_t>("FieldData");
+  auto cdg = pkg->Param<ConfigurationDomainGeometry>("CDG");
+  auto Jre_mhd = pkg->Param<DualView3>("Jre_mhd");
+  const Real Zc = pkg->Param<Real>("Zc");
+  const Real En = pkg->Param<Real>("En");
+  const Real eta_norm = pkg->Param<Real>("eta_norm");
+  const auto hl = data.hermite_locator;
+  const auto il = cdg.indicator_locator;
+  constexpr int N = 400;
+  constexpr int NC = 7;
+  const Real R0 = hl.R0 + 1e-10;
+  const Real dR = (hl.nR * hl.dR - 2e-10) / (N - 1);
+
+  data.hermite_data.sync_device();
+  Jre_mhd.sync_device();
+  FieldEvaluator f{cdg.hermite_locator, data.hermite_data.view_device()};
+  auto jre = Jre_mhd.view_device();
+  int jz = static_cast<int>(Kokkos::round((Zc - il.Z0) / il.dZ));
+  jz = jz < 0 ? 0 : (jz >= il.nZ ? il.nZ - 1 : jz);
+
+  Kokkos::View<Real **> buf("midplane", N, NC);
+  Kokkos::parallel_for("MidplaneProfile", N, KOKKOS_LAMBDA(const int k) {
+    const Real R = R0 + k * dR;
+    EvalGCE ev;
+    f.eval(ev, R, Zc, 0.0);
+    int ir = static_cast<int>(Kokkos::round((R - il.R0) / il.dR));
+    ir = ir < 0 ? 0 : (ir >= il.nR ? il.nR - 1 : ir);
+    const Real Epar = (ev.E[0] * ev.B[0] + ev.E[1] * ev.B[1] + ev.E[2] * ev.B[2]) / ev.Bmag;
+    buf(k, 0) = R;
+    buf(k, 1) = ev.E[1];
+    buf(k, 2) = Epar;
+    buf(k, 3) = En * eta_norm * ev.J[1];
+    buf(k, 4) = En * jre(ir, jz, 1);
+    buf(k, 5) = ev.J[1];
+    buf(k, 6) = jre(ir, jz, 1);
+  });
+  auto h = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), buf);
+  if (diag == nullptr) return;
+  std::vector<std::vector<double>> cols(NC, std::vector<double>(N));
+  for (int k = 0; k < N; ++k)
+    for (int c = 0; c < NC; ++c) cols[c][k] = h(k, c);
+  diag->WriteProfile(std::format("midplane_c{:06d}", tm.ncycle),
+                     {"R", "E_phi", "E_par", "E_ohm", "E_re", "J_phi", "J_re_phi"},
+                     {"a", "E_c", "E_c", "E_c", "E_c", "J_0", "eta J"}, cols);
+  diag->Flush();
+}
+
+} // namespace Kinetic

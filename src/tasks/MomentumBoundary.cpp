@@ -52,6 +52,10 @@ TaskStatus UpdateMomentumBoundary(
 
   pkg->UpdateParam("p_BC", p_BC_update);
   pkg->UpdateParam("p_RE", p_BC_update);
+  // Hybrid/update_gamma_min = 1: the secondary threshold follows the boundary,
+  // gamma_min = 2 (gamma_BC - 1) + 1, the relation of the deck default.
+  if (pkg->AllParams().hasKey("gamma_min_dyn"))
+    pkg->UpdateParam("gamma_min_dyn", 2.0 * (0.1 / maxE) + 1.0);
 
   return TaskStatus::complete;
 }

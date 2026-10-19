@@ -70,7 +70,11 @@ static TaskStatus PushParticlesImpl(Mesh *pm, Real t0, Real dt, const Field &f,
   const auto rtol = pkg->Param<Real>("rtol");
   auto rng_pool = pkg->Param<Kinetic::RNGPool>("rng_pool");
 
-  const auto gamma_min = pkg->Param<Real>("gamma_min");
+  // gamma_min_dyn: set from the maximum E each current-deposition step when
+  // Hybrid/update_gamma_min = 1 (UpdateMomentumBoundary); else the deck value.
+  const Real gamma_min = pkg->AllParams().hasKey("gamma_min_dyn")
+                             ? pkg->Param<Real>("gamma_min_dyn")
+                             : pkg->Param<Real>("gamma_min");
   const auto p_RE =      pkg->Param<Real>("p_RE");
 
   const auto ms = pkg->Param<MollerSource>("MollerSource");
@@ -361,7 +365,9 @@ TaskStatus CleanupParticles(MeshBlock* pmb) {
 
 TaskStatus AddSecondaries(MeshBlock* pmb, const Real dtLA) {
   auto pkg = pmb->packages.Get("Deck");
-  auto gamma_min = pkg->Param<Real>("gamma_min");
+  const Real gamma_min = pkg->AllParams().hasKey("gamma_min_dyn")
+                             ? pkg->Param<Real>("gamma_min_dyn")
+                             : pkg->Param<Real>("gamma_min");
   auto rng_pool = pkg->Param<Kinetic::RNGPool>("rng_pool");
   auto data = pmb->meshblock_data.Get();
   auto swarm = data->GetSwarmData()->Get("particles");
