@@ -144,8 +144,10 @@ large-angle step, one A100 per run):
   |---|---|---|---|
   | 0.01 | 10 | 0.302 | 141 s |
   | 0.001 | 93 | 2.454 | 545 s |
+  | 0.0001 | 922 | 2.519 | 1704 s |
 
   At 0.01 the per-particle chance of a secondary in one step is far above 1, so the
-  "at most one secondary per step" model saturates and γ collapses. At 0.001, γ agrees
-  with γ_min = 1.002 (2.469) within 0.6%. The large-angle step must keep the
+  "at most one secondary per step" model saturates and γ collapses. At 0.001, γ is
+  within 0.6% of the γ_min = 1.002 result (2.469). It is still 2.6% below 0.0001, so
+  converging needs roughly 1000 large-angle steps per force step. The large-angle step must keep the
   per-particle probability ≲ 0.1, not just the net growth at 1%.
