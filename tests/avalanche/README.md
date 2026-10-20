@@ -151,3 +151,18 @@ large-angle step, one A100 per run):
   within 0.6% of the γ_min = 1.002 result (2.469). It is still 2.6% below 0.0001, so
   converging needs roughly 1000 large-angle steps per force step. The large-angle step must keep the
   per-particle probability ≲ 0.1, not just the net growth at 1%.
+
+### Sampler performance
+
+- **Micro-benchmark** (`la_sampler_bench`, one A100, 2^18 secondaries per launch,
+  results in `la_bench_a100.csv`, figure `la_speedup.png`):
+  - The fast sampler costs 0.26–0.45 ns per secondary at every γ_min and p.
+  - The reference costs grow as p/(γ_min − 1).
+  - Geometric-mean speed-up: ×84 at γ_min = 1.1, ×241 at 1.02, ×1705 at 1.002,
+    ×14784 at 1.0002 (up to ×130000 at p = 150).
+- **fig11a with both samplers** at the same settings (one A100 per row, γ_min 1.02, 1%
+  growth per large-angle step, rk4 2e-6; figure `la_fig11a_samplers.png`):
+  - The 10 rows agree within 1.1%, mostly within 0.5%.
+  - Total wall time is 9167 s with the reference sampler and 3547 s with fast
+    (×2.6; per row ×1.6–4.2).
+- Report: `python3 la_sampler_report.py --bench la_bench_a100.csv --ref DIR --fast DIR --out OUT`.

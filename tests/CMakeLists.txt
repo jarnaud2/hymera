@@ -155,3 +155,6 @@ target_link_libraries(la_sampler_test PRIVATE Parthenon::parthenon hflux::hflux)
 add_test(NAME kin_la_sampler
          COMMAND ${CMAKE_SOURCE_DIR}/tests/avalanche/run_la_sampler_check.sh $<TARGET_FILE:la_sampler_test>)
 set_tests_properties(kin_la_sampler PROPERTIES LABELS "kinetic" TIMEOUT 600)
+add_executable(la_sampler_bench ${CMAKE_SOURCE_DIR}/tests/avalanche/la_sampler_bench.cpp)
+target_include_directories(la_sampler_bench PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/kinetic ${CMAKE_SOURCE_DIR}/src/mhd)
+target_link_libraries(la_sampler_bench PRIVATE mhd_core Parthenon::parthenon hflux::hflux)
