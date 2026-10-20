@@ -136,8 +136,16 @@ large-angle step, one A100 per run):
 - At γ_min = 1.002 (row 0), both samplers give γ = 2.479 (fast) and 2.488 (reference)
   on the same outputs. The fast run took 197 s; the reference run did 79% of the
   steps in 1200 s.
-- **Do not go to γ_min ≲ 1.002 without a smaller large-angle step.** At γ_min = 1.0002
-  the per-particle chance of a secondary in one step is far above 1, so the "at most
-  one secondary per step" model saturates. Almost every primary makes a secondary in
-  the first step, and γ falls to 0.30. The large-angle step must keep the per-particle
-  probability ≲ 0.1, not just the net growth at 1%.
+- **Small γ_min needs a smaller large-angle step.** The table below is row 0 at
+  γ_min = 1.0002, the code default, with the fast sampler (the reference sampler does
+  not finish one step there).
+
+  | `--la-growth` | large-angle steps per force step | γ | A100 time |
+  |---|---|---|---|
+  | 0.01 | 10 | 0.302 | 141 s |
+  | 0.001 | 93 | 2.454 | 545 s |
+
+  At 0.01 the per-particle chance of a secondary in one step is far above 1, so the
+  "at most one secondary per step" model saturates and γ collapses. At 0.001, γ agrees
+  with γ_min = 1.002 (2.469) within 0.6%. The large-angle step must keep the
+  per-particle probability ≲ 0.1, not just the net growth at 1%.
