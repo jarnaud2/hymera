@@ -99,6 +99,7 @@ def main():
     ap.add_argument("--title", default="VDE pilot: hybrid run summary")
     ap.add_argument("--timing", type=Path, default=None, help="text file with wall-time lines")
     ap.add_argument("--note", action="append", default=[], help="extra line for the set-up section")
+    ap.add_argument("--cmdline", default="", help="the run's Block/key=value overrides, to mark them")
     args = ap.parse_args()
     out = args.out or args.run
     out.mkdir(parents=True, exist_ok=True)
@@ -112,6 +113,17 @@ def main():
         params = {k: f["Params"].attrs[k] for k in f["Params"].attrs}
         info = {k: f["Info"].attrs[k] for k in f["Info"].attrs}
     inputs = parse_input_dump(dump)
+    over = {}
+    for tok in args.cmdline.split():
+        if "=" in tok and "/" in tok.split("=")[0]:
+            k, v = tok.split("=", 1)
+            b, n = k.rsplit("/", 1)
+            over[(b, n)] = v
+    inputs = [(b, n, v, "command line" if (b, n) in over else src) for b, n, v, src in inputs]
+    last = sorted(glob.glob(str(args.run / "*.out2.0*.phdf")))[-1]
+    with h5py.File(last, "r") as f:
+        params_end = {k: f["Params"].attrs[k] for k in f["Params"].attrs}
+        t_end = float(f["Info"].attrs["Time"])
 
     diag = sorted(glob.glob(str(args.run / "*.diag.h5")))
     profiles = {}
@@ -131,11 +143,22 @@ def main():
             times[int(f["Info"].attrs["NCycle"])] = float(f["Info"].attrs["Time"])
 
     plot_profiles(profiles, times, params, out)
-    write_tex(args, out, inputs, params, info, info_lines, profiles, times)
+    series = {}
+    if diag:
+        with h5py.File(diag[0], "r") as f:
+            if "timeseries/currents" in f:
+                g = f["timeseries/currents"]
+                series = {k: g[k][()] for k in g}
+    steps = [(int(m.group(1)), float(m.group(2))) for m in
+             re.finditer(r"^cycle=(\d+) .*wsec_step=([0-9.e+-]+)", log, re.M)]
+    plot_currents(series, out)
+    write_tex(args, out, inputs, params, info, info_lines, profiles, times, series, steps, params_end, t_end)
     print(f"wrote {out / 'summary.tex'}")
 
 
 def plot_profiles(profiles, times, params, out):
+    """E_phi (solid) and the Ohmic E_n eta J_phi (dashed) on the same axes, one
+    colour per time; the runaway part E_n J_re,phi (dotted) if it is not zero."""
     if not profiles:
         return
     import matplotlib
@@ -144,40 +167,52 @@ def plot_profiles(profiles, times, params, out):
     cyc = sorted(profiles)
     sel = cyc if len(cyc) <= 6 else [cyc[int(round(k))] for k in np.linspace(0, len(cyc) - 1, 6)]
     cm = plt.get_cmap("viridis")
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4.2), sharex=True, constrained_layout=True)
-    names = [("E_phi", r"$E_\phi$"), ("E_ohm", r"$E_n\,\eta\,J_\phi$ (Ohmic, MHD $J$)"),
-             ("E_re", r"$E_n\,J_{re,\phi}$ (runaway)")]
-    for ax, (c, lab) in zip(axes, names):
-        for k, cy in enumerate(sel):
-            p = profiles[cy]
-            t = times.get(cy, float("nan"))
-            ax.plot(p["R"], p[c], color=cm(k / max(1, len(sel) - 1)), lw=1.3,
-                    label=f"t = {t * 1e3:.2f} ms")
-        ax.set_title(lab, loc="left", fontsize=10)
-        ax.set_xlabel(r"$R$ [$a$] at $Z = Z_{\rm axis}$")
-        ax.grid(True, alpha=0.3)
-    axes[0].set_ylabel(r"[$E_c$]")
-    axes[0].legend(fontsize=7)
+    has_re = any(np.any(profiles[c]["E_re"] != 0) for c in cyc)
+    fig, ax = plt.subplots(figsize=(9, 5.2), constrained_layout=True)
+    for k, cy in enumerate(sel):
+        p = profiles[cy]
+        c = cm(k / max(1, len(sel) - 1))
+        t = times.get(cy, float("nan"))
+        ax.plot(p["R"], p["E_phi"], "-", color=c, lw=1.5, label=f"t = {t * 1e3:.2f} ms")
+        ax.plot(p["R"], p["E_ohm"], "--", color=c, lw=1.2)
+        if has_re:
+            ax.plot(p["R"], p["E_re"], ":", color=c, lw=1.2)
+    ax.plot([], [], "-", color="0.3", label=r"$E_\phi$")
+    ax.plot([], [], "--", color="0.3", label=r"$E_n\,\eta\,J_\phi$ (Ohmic, MHD $J$)")
+    if has_re:
+        ax.plot([], [], ":", color="0.3", label=r"$E_n\,J_{re,\phi}$ (runaway)")
+    ax.axvline(float(params.get("Deck/Rc", np.nan)), color="0.5", lw=0.8, ls=":")
+    ax.set_xlabel(r"$R$ [$a$] at $Z = Z_{\rm axis}$ (dotted vertical: magnetic axis)")
+    ax.set_ylabel(r"electric field [$E_c$]")
+    ax.set_title(r"Midplane: $E_\phi$ and $\eta J_\phi$ in the same units", loc="left")
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=8, ncol=2)
     fig.savefig(out / "midplane.png", dpi=150)
     plt.close(fig)
 
-    p = profiles[cyc[-1]]
-    fig, ax = plt.subplots(figsize=(7.2, 4.4), constrained_layout=True)
-    ax.plot(p["R"], p["E_phi"], color="#2a78d6", lw=1.6, label=r"$E_\phi$")
-    ax.plot(p["R"], p["E_ohm"], color="#eb6834", lw=1.6, label=r"$E_n\,\eta\,J_\phi$ (Ohmic)")
-    ax.plot(p["R"], p["E_re"], color="#1baf7a", lw=1.6, label=r"$E_n\,J_{re,\phi}$ (runaway)")
-    ax.axvline(float(params.get("Deck/Rc", np.nan)), color="0.5", lw=0.8, ls=":")
-    t = times.get(cyc[-1], float("nan"))
-    ax.set_title(f"Midplane profile at t = {t * 1e3:.2f} ms (cycle {cyc[-1]})", loc="left")
-    ax.set_xlabel(r"$R$ [$a$] at $Z = Z_{\rm axis}$ (dotted: axis)")
-    ax.set_ylabel(r"[$E_c$]")
+
+def plot_currents(series, out):
+    if not series:
+        return
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    t = series["t"] * 1e3
+    fig, ax = plt.subplots(figsize=(7.2, 4.2), constrained_layout=True)
+    ax.plot(t, series["I_re_particles"] / 1e3, "o-", color="#1baf7a", label=r"$I_{re}$ (particles) [kA]")
+    ax.set_xlabel("t [ms]")
+    ax.set_ylabel(r"$I_{re}$ [kA]")
     ax.grid(True, alpha=0.3)
-    ax.legend(fontsize=8)
-    fig.savefig(out / "midplane_last.png", dpi=150)
+    ax2 = ax.twinx()
+    ax2.plot(t, series["I_ohmic"] / 1e6, "s--", color="#eb6834", label=r"$I_{\rm ohmic}$ [MA]")
+    ax2.set_ylabel(r"$I_{\rm ohmic}$ [MA]")
+    h1, l1 = ax.get_legend_handles_labels(); h2, l2 = ax2.get_legend_handles_labels()
+    ax.legend(h1 + h2, l1 + l2, fontsize=8, loc="center left")
+    fig.savefig(out / "currents.png", dpi=150)
     plt.close(fig)
 
 
-def write_tex(args, out, inputs, params, info, info_lines, profiles, times):
+def write_tex(args, out, inputs, params, info, info_lines, profiles, times, series, steps, params_end, t_end):
     L = []
     w = L.append
     w(r"\documentclass[10pt,a4paper]{article}")
@@ -207,8 +242,27 @@ def write_tex(args, out, inputs, params, info, info_lines, profiles, times):
         w(r"$E_n\eta J_\phi$ with $J$ the MHD current, and the runaway part $E_nJ_{re,\phi}$")
         w(r"(the current deposited by the particles and passed to the MHD solve). In the")
         w(r"MHD Ohm's law, $E = E_n(-V\times B + \eta J) - E_nJ_{re}$.")
-        w(r"\begin{center}\includegraphics[width=\linewidth]{midplane.png}\end{center}")
-        w(r"\begin{center}\includegraphics[width=0.7\linewidth]{midplane_last.png}\end{center}")
+        w(r"\begin{center}\includegraphics[width=0.9\linewidth]{midplane.png}\end{center}")
+
+    if series:
+        w(r"\subsection*{Currents}")
+        w(r"Total toroidal currents from the diagnostics file: the Ohmic (MHD) current and")
+        w(r"the runaway current of the particles.")
+        w(r"\begin{center}\includegraphics[width=0.7\linewidth]{currents.png}\end{center}")
+        w(r"\begin{center}\small\begin{tabular}{rrrr}\toprule $t$ [ms] & $I_{\rm ohmic}$ [MA] & $I_{re}$ [kA] & growth per step\\\midrule")
+        t, io, ir = series["t"], series["I_ohmic"], series["I_re_particles"]
+        for k in range(len(t)):
+            gr = f"{ir[k] / ir[k - 1]:.3f}" if k > 0 and ir[k - 1] > 0 else "--"
+            w(rf"{t[k] * 1e3:.2f} & {io[k] / 1e6:.4f} & {ir[k] / 1e3:.2f} & {gr}\\")
+        w(r"\bottomrule\end{tabular}\end{center}")
+    if steps:
+        w(r"\subsection*{Cost per MHD step}")
+        w(r"Wall time per MHD step from the run log (\texttt{wsec\_step}); cycle 0 is the")
+        w(r"set-up (MHD initialisation, first MHD step, seeding).")
+        w(r"\begin{center}\small\begin{tabular}{rr}\toprule cycle & wall [s]\\\midrule")
+        for c, ws in steps:
+            w(rf"{c} & {ws:.0f}\\")
+        w(r"\bottomrule\end{tabular}\end{center}")
 
     if info_lines:
         w(r"\subsection*{Set-up facts from the log}")
@@ -218,7 +272,9 @@ def write_tex(args, out, inputs, params, info, info_lines, profiles, times):
         w(r"\end{itemize}")
 
     w(r"\subsection*{Derived values (Deck package)}")
-    w(r"\begin{longtable}{llp{9cm}}\toprule parameter & value & meaning\\\midrule\endhead")
+    w(rf"Values at $t=0$ (first output) and at the last output ($t={t_end * 1e3:.2f}$\,ms); they")
+    w(r"differ only for parameters the run updates (momentum boundary, magnetic axis).")
+    w(r"\begin{longtable}{lllp{7.5cm}}\toprule parameter & $t=0$ & end & meaning\\\midrule\endhead")
     for k in sorted(params):
         if not k.startswith("Deck/"):
             continue
@@ -226,7 +282,9 @@ def write_tex(args, out, inputs, params, info, info_lines, profiles, times):
         v = fmt(params[k])
         if v.startswith("array"):
             continue
-        w(rf"\texttt{{{tex(name)}}} & {tex(v)} & {DERIVED_DOC.get(name, '')}\\")
+        ve = fmt(params_end.get(k, params[k]))
+        ve = ve if ve != v else ""
+        w(rf"\texttt{{{tex(name)}}} & {tex(v)} & {tex(ve)} & {DERIVED_DOC.get(name, '')}\\")
     w(r"\bottomrule\end{longtable}")
 
     w(r"\subsection*{All input parameters}")
