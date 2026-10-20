@@ -53,9 +53,13 @@ TaskStatus UpdateMomentumBoundary(
   pkg->UpdateParam("p_BC", p_BC_update);
   pkg->UpdateParam("p_RE", p_BC_update);
   // Hybrid/update_gamma_min = 1: the secondary threshold follows the boundary,
-  // gamma_min = 2 (gamma_BC - 1) + 1, the relation of the deck default.
-  if (pkg->AllParams().hasKey("gamma_min_dyn"))
-    pkg->UpdateParam("gamma_min_dyn", 2.0 * (0.1 / maxE) + 1.0);
+  // gamma_min = 2 (gamma_BC - 1) + 1, the relation of the deck default, but not
+  // below Hybrid/gamma_min_floor (default 1.02): the large-angle sampler's
+  // acceptance falls as (gamma_min - 1), and below 1.02 it stalls.
+  if (pkg->AllParams().hasKey("gamma_min_dyn")) {
+    const Real floor = pkg->Param<Real>("gamma_min_floor");
+    pkg->UpdateParam("gamma_min_dyn", Kokkos::max(floor, 2.0 * (0.1 / maxE) + 1.0));
+  }
 
   return TaskStatus::complete;
 }
