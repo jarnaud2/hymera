@@ -5,6 +5,7 @@
 #include "kinetic/ParticleVerificator.hpp"
 #include "kinetic/Log.hpp"
 #include "kinetic/DiagnosticsFile.hpp"
+#include "kinetic/PushTiming.hpp"
 #include "kinetic/LargeAngleCollision.hpp"
 #include "kinetic/SmallAngleCollision.hpp"
 #include "kinetic/FieldEvaluator.hpp"
@@ -192,7 +193,16 @@ static TaskStatus PushParticlesImpl(Mesh *pm, Real t0, Real dt, const Field &f,
           }
         }
       };
+  // Simulation/push_timing = 1: time the push kernel alone (fenced before and
+  // after, so only the timing is affected) for /timeseries/push.
+  const bool timed = pkg->AllParams().hasKey("push_timing");
+  if (timed) Kokkos::fence();
+  Kokkos::Timer push_timer;
   ParticleLoop(pkg, pack_swarm_r.GetMaxFlatIndex(), push);
+  if (timed) {
+    Kokkos::fence();
+    Kinetic::PushTiming::Add(push_timer.seconds(), pack_swarm_r.GetMaxFlatIndex() + 1);
+  }
 
   return TaskStatus::complete;
 

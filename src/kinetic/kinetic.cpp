@@ -27,6 +27,7 @@ using namespace parthenon;
 #include "kinetic/KineticParams.hpp"
 #include "kinetic/Log.hpp"
 #include "kinetic/DiagnosticsFile.hpp"
+#include "kinetic/PushTiming.hpp"
 #include "kinetic/GuidingCenterEquations.hpp"
 #include "kinetic/LargeAngleCollision.hpp"
 #include "kinetic/SmallAngleCollision.hpp"
@@ -472,6 +473,13 @@ void SetupDiagnostics(ParameterInput *pin, const KineticParams &prm,
   // On restart the file is reopened as is; rows past the restart time are cut in
   // WorkBeforeLoop, once Parthenon has restored the simulation time.
   DiagnosticsFile::Open(pin->GetString("parthenon/job", "problem_id"), Globals::is_restart);
+  // Push timing only when the deck asks for it: reading an existing parameter
+  // leaves the parameter dump of other runs unchanged.
+  if (pin->DoesParameterExist("Simulation", "push_timing") &&
+      pin->GetInteger("Simulation", "push_timing") == 1) {
+    pkg->AddParam("push_timing", 1);
+    PushTiming::enabled = true;
+  }
   if (auto *diag = DiagnosticsFile::Get())
     diag->DeclareSeries("conservation", {"t", "p_phi_mean", "mu_mean", "weight_total"},
                         {"s", "", "", ""});

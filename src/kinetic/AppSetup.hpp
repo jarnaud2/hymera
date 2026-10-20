@@ -23,6 +23,7 @@
 
 #include "kinetic/kinetic.hpp"
 #include "kinetic/DiagnosticsFile.hpp"
+#include "kinetic/PushTiming.hpp"
 #include "mhd/mhd.h"
 
 namespace Kinetic {
@@ -88,6 +89,7 @@ inline void AttachDiagnostics(parthenon::ParthenonManager &pman) {
   in.UserMeshWorkBeforeOutput = [before_output](Mesh *pm, ParameterInput *pin,
                                                 SimTime const &tm) {
     if (before_output) before_output(pm, pin, tm);
+    PushTiming::Flush(tm.time);
     FlushDiagnostics();
   };
 

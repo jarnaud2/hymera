@@ -67,7 +67,7 @@ BASE="${KEEP:-$(mktemp -d)}"
 [ -n "$KEEP" ] || trap 'rm -rf "$BASE"' EXIT
 mkdir -p "$BASE"
 
-printf '%-24s %7s %9s %10s %7s %10s\n' label threads particles "s/step" alive mean_p
+printf '%-24s %7s %9s %10s %12s %7s %10s\n' label threads particles "s/step" "push ns/slot" alive mean_p
 for T in $THREADS; do
   WORK="$BASE/${LABEL//[^A-Za-z0-9_=.-]/_}_t$T"
   rm -rf "$WORK"; mkdir -p "$WORK/r1/r2"
@@ -78,7 +78,7 @@ for T in $THREADS; do
   if ! (cd "$WORK/r1/r2" && OMP_NUM_THREADS=$T OMP_PROC_BIND=spread OMP_PLACES=threads \
         $CMD "$EXE" -i "$DECK" parthenon/time/nlim="$NLIM" \
         ParticleSeed/num_particles_per_block="$NPB" Simulation/parallel_push="$PP" \
-        Simulation/verbosity=quiet $SET > log.txt 2>&1); then
+        Simulation/verbosity=quiet Simulation/push_timing=1 $SET > log.txt 2>&1); then
     echo "run failed ($LABEL, $T threads); see $WORK/r1/r2/log.txt" >&2
     tail -5 "$WORK/r1/r2/log.txt" >&2
     exit 1
@@ -86,8 +86,21 @@ for T in $THREADS; do
   # Mean wsec_step over cycles 2..NLIM (cycle 1 includes first-touch costs).
   STEP=$(grep -E '^cycle=[0-9]+ ' "$WORK/r1/r2/log.txt" |
          awk '{for(i=1;i<=NF;i++) if($i ~ /^cycle=/){split($i,c,"=")} ; for(i=1;i<=NF;i++) if($i ~ /^wsec_step=/){split($i,w,"=")} ; if (c[2] >= 2) {s+=w[2]; n++}} END {if (n) printf "%.3f", s/n; else print "n/a"}')
-  ALIVE="-"; MEANP="-"
+  ALIVE="-"; MEANP="-"; PUSHNS="-"
   if [ -n "$PYTHON" ]; then
+    # Push-kernel time per particle slot per large-angle step, outputs after the
+    # first (which holds the set-up step): /timeseries/push of the diagnostics file.
+    PUSHNS=$("$PYTHON" - "$WORK/r1/r2" <<'EOF'
+import glob, sys
+import h5py
+f = sorted(glob.glob(sys.argv[1] + "/*.diag.h5"))
+g = h5py.File(f[0], "r").get("timeseries/push") if f else None
+if g is None or len(g["push_s"]) < 2:
+    print("-"); sys.exit()
+s, n = g["push_s"][1:].sum(), g["slots"][1:].sum()
+print(f"{s / n * 1e9:.2f}" if n else "-")
+EOF
+)
     read -r ALIVE MEANP < <("$PYTHON" - "$WORK/r1/r2" <<'EOF'
 import glob, sys
 import h5py
@@ -101,5 +114,5 @@ print(int(alive.sum()), f"{p.mean():.6f}" if len(p) else "-")
 EOF
 )
   fi
-  printf '%-24s %7s %9s %10s %7s %10s\n' "$LABEL" "$T" "$((NPB * 8))" "$STEP" "$ALIVE" "$MEANP"
+  printf '%-24s %7s %9s %10s %12s %7s %10s\n' "$LABEL" "$T" "$((NPB * 8))" "$STEP" "$PUSHNS" "$ALIVE" "$MEANP"
 done
