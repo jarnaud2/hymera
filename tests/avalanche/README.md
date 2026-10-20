@@ -110,3 +110,34 @@ has γ_ref·dt_force = 0.092 in every row. Measured on the analytic field (rk4 h
   large-angle step, which caps the growth when that probability is not small.
 - On the CPU the run time hardly depends on dtLA. The cost is the rk4 push itself,
   about 1.8e6 steps per particle per row.
+
+## Fast large-angle sampler
+
+`Avalanche/la_sampler = fast` (and `Hybrid/la_sampler`) switches the secondary
+(γ, ξ) sampling to `LargeAngleCollisionFast`. It samples the same distribution with
+proposals close to the target; `ctest -R kin_la_sampler` checks the distributions
+against each other. On fig11a (analytic field, rk4 hRK 2e-6, 1% growth per
+large-angle step, one A100 per run):
+
+| row | ψ_n | E_0 | reference γ | baseline (reference sampler) | fast sampler | fast / baseline − 1 | A100 time |
+|---|---|---|---|---|---|---|---|
+| 0 | 0 | 70.5 | 2.5015 | 2.5069 | 2.5038 | −0.1% | 188 s |
+| 4 | 0 | 46.5 | 1.3477 | 1.3171 | 1.3155 | −0.1% | 312 s |
+| 9 | 0.0559 | 71.4 | 2.1354 | 2.1600 | 2.1452 | −0.7% | 206 s |
+| 13 | 0.0559 | 47.5 | 1.0831 | 1.1299 | 1.1009 | −2.6% | 382 s |
+| 18 | 0.212 | 72.0 | 1.7908 | 1.7960 | 1.8022 | +0.3% | 257 s |
+| 22 | 0.212 | 48.1 | 0.8985 | 0.9402 | 0.9189 | −2.3% | 460 s |
+| 27 | 0.441 | 72.7 | 1.5446 | 1.5441 | 1.5475 | +0.2% | 279 s |
+| 31 | 0.441 | 48.7 | 0.7692 | 0.7778 | 0.7703 | −1.0% | 536 s |
+| 36 | 0.711 | 73.5 | 1.3508 | 1.3496 | 1.3276 | −1.6% | 318 s |
+| 40 | 0.711 | 49.5 | 0.6615 | 0.6603 | 0.6559 | −0.7% | 609 s |
+
+- All 10 rows are within 2.4% of the reference, and every one is within 10%.
+- At γ_min = 1.002 (row 0), both samplers give γ = 2.479 (fast) and 2.488 (reference)
+  on the same outputs. The fast run took 197 s; the reference run did 79% of the
+  steps in 1200 s.
+- **Do not go to γ_min ≲ 1.002 without a smaller large-angle step.** At γ_min = 1.0002
+  the per-particle chance of a secondary in one step is far above 1, so the "at most
+  one secondary per step" model saturates. Almost every primary makes a secondary in
+  the first step, and γ falls to 0.30. The large-angle step must keep the per-particle
+  probability ≲ 0.1, not just the net growth at 1%.
