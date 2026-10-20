@@ -65,3 +65,10 @@ __pycache__
 # __pycache__ rule, so restate it here.
 tests/regression/viz/out/
 tests/regression/**/__pycache__/
+
+# Manuscript, figures and documents stay local (not published)
+manuscript/
+*.pdf
+*.png
+*.gif
+*.mp4
