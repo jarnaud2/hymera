@@ -200,6 +200,90 @@ KOKKOS_INLINE_FUNCTION void LargeAngleCollision(Real &p, Real &xi, const Real w,
   xi = xiSecondary;
 }
 
+/// Same distribution of the secondary (gamma, xi) as LargeAngleCollision,
+/// sampled with proposals close to the target instead of uniform ones.
+///
+/// gamma: in the kinetic energy e = gamma - 1, with e_p = g - 1 of the primary,
+///   the target f(e) (the TrialFuncVec of LargeAngleCollision) peaks as 1/e^2 at
+///   e_min. Proposal q(e) ~ 1/e^2 on [e_min, e_p / 2] (inverse CDF), accepted
+///   with f(e) e^2 / M. f(e) e^2 increases monotonically in e, so
+///   M = f(e_p / 2) (e_p / 2)^2 bounds it exactly. Acceptance 1/3 to 1/2 for all
+///   p and gamma_min, against 1e-5 to 3e-2 for the uniform proposal.
+/// xi: with xi = xi1 + xi2 sin(theta) the pitch density Pi d(xi), Pi =
+///   1/(pi sqrt(xi2^2 - (xi - xi1)^2 + Dxi^2)) on |xi - xi1| < xi2, becomes
+///   (1/pi) c / sqrt(c^2 + Dxi^2) d(theta), c = xi2 cos(theta). Proposal theta
+///   uniform on [-pi/2, pi/2], accepted with c / sqrt(c^2 + Dxi^2) <= 1 and
+///   |xi| <= 1 (the domain of the uniform xi proposal).
+/// Draws differ from LargeAngleCollision, so runs are not bit-identical; the
+/// fig11a benchmark (tests/avalanche) checks the growth rates.
+template <typename RNGPoolType>
+KOKKOS_INLINE_FUNCTION void LargeAngleCollisionFast(Real &p, Real &xi, const Real w,
+                                                    const Real dtLA,
+                                                    const Real gSecondaryMin,
+                                                    RNGPoolType rng_pool) {
+  constexpr int MaxTrys = 100000;
+  const Real g = gamma_(p);
+  if (!(g > 2.0 * gSecondaryMin - 1.0)) {  // no secondary above gamma_min possible
+    p = -1.0;
+    return;
+  }
+  const Real ep = g - 1.0;
+  const Real e0 = gSecondaryMin - 1.0;
+  const Real e1 = 0.5 * ep;
+  const Real c0 = 2.0 * M_PI * (Kokkos::sqrt(g * g - 1.0) / g) * g * g /
+                  ((g - 1.0) * (g - 1.0) * (g - 1.0) * (g + 1.0));
+  const Real r = ((g - 1.0) / g) * ((g - 1.0) / g);
+  auto h = [&](const Real e) {  // f(e) e^2
+    const Real x = ep * ep / (e * (ep - e));
+    return c0 * (x * x - 3.0 * x + r * (1.0 + x)) * e * e;
+  };
+  const Real M = h(e1) * (1.0 + 1e-12);
+  const Real inv0 = 1.0 / e0, dinv = 1.0 / e0 - 1.0 / e1;
+
+  Real gSecondary = 0.0;
+  int n = 0;
+  for (; n < MaxTrys; ++n) {
+    auto rng_gen = rng_pool.get_state();
+    const Real u = rng_gen.drand(0.0, 1.0);
+    const Real v = rng_gen.drand(0.0, 1.0);
+    rng_pool.free_state(rng_gen);
+    const Real e = 1.0 / (inv0 - u * dinv);
+    if (v * M < h(e)) {
+      gSecondary = 1.0 + e;
+      break;
+    }
+  }
+  if (n == MaxTrys) {
+    p = -1.0;
+    return;
+  }
+
+  constexpr Real Dxi = 0.02;  // as in LargeAngleCollision
+  const Real xi1 = xi * Kokkos::sqrt((g + 1.0) * (gSecondary - 1.0) /
+                                     ((g - 1.0) * (gSecondary + 1.0)));
+  const Real xi2 = Kokkos::sqrt(2.0 * (g - gSecondary) * (1.0 - xi * xi) /
+                                ((g - 1.0) * (gSecondary + 1.0)));
+  Real xiSecondary = 0.0;
+  for (n = 0; n < MaxTrys; ++n) {
+    auto rng_gen = rng_pool.get_state();
+    const Real th = rng_gen.drand(-0.5 * M_PI, 0.5 * M_PI);
+    const Real v = rng_gen.drand(0.0, 1.0);
+    rng_pool.free_state(rng_gen);
+    const Real X = xi1 + xi2 * Kokkos::sin(th);
+    const Real c = xi2 * Kokkos::cos(th);
+    if (Kokkos::abs(X) <= 1.0 && v * Kokkos::sqrt(c * c + Dxi * Dxi) < c) {
+      xiSecondary = X;
+      break;
+    }
+  }
+  if (n == MaxTrys) {
+    p = -1.0;
+    return;
+  }
+  p = momentum_(gSecondary);
+  xi = xiSecondary;
+}
+
 template <typename RNGPoolType>
 KOKKOS_INLINE_FUNCTION void LargeAngleCollisionRAMc(Real &p, Real &xi, const Real w,
                         const Real dtLA, const Real gSecondaryMin,

@@ -36,6 +36,7 @@ int main(int argc, char *argv[]) {
   const bool hb = pman.pinput->DoesBlockExist("Hybrid");
   const int midplane = hb ? pman.pinput->GetOrAddInteger("Hybrid", "midplane_profile", 0) : 0;
   const int dyn_gmin = hb ? pman.pinput->GetOrAddInteger("Hybrid", "update_gamma_min", 0) : 0;
+  const bool la_fast = hb && pman.pinput->GetOrAddString("Hybrid", "la_sampler", "reference") == "fast";
   const Real gmin_floor =
       dyn_gmin == 1 ? pman.pinput->GetOrAddReal("Hybrid", "gamma_min_floor", 1.02) : 1.02;
   pman.app_input->ProcessPackages = [=](std::unique_ptr<ParameterInput> &pin) {
@@ -45,6 +46,7 @@ int main(int argc, char *argv[]) {
       pkg->AddParam("gamma_min_dyn", pkg->Param<Real>("gamma_min"), Params::Mutability::Mutable);
       pkg->AddParam("gamma_min_floor", gmin_floor);
     }
+    if (la_fast) pkg->AddParam("la_fast", 1);
     if (midplane == 1) {
       const auto j = pkg->Param<DualView3>("Jre_mhd");
       pkg->AddParam("Jre_last", View3("Jre_last", j.extent(0), j.extent(1)));

@@ -145,3 +145,13 @@ add_test(NAME kin_avalanche_fig11a
          COMMAND ${CMAKE_SOURCE_DIR}/tests/avalanche/check_fig11a.sh
                  --exe $<TARGET_FILE:avalanche>)
 set_tests_properties(kin_avalanche_fig11a PROPERTIES LABELS "avalanche" TIMEOUT 10800)
+
+# Large-angle sampler: samples of LargeAngleCollision and LargeAngleCollisionFast
+# for tests/avalanche/la_sampler_check.py (distribution comparison and timing).
+add_executable(la_sampler_test ${CMAKE_SOURCE_DIR}/tests/avalanche/la_sampler_test.cpp)
+target_include_directories(la_sampler_test PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/kinetic ${CMAKE_SOURCE_DIR}/src/mhd)
+target_link_libraries(la_sampler_test PRIVATE mhd_core)
+target_link_libraries(la_sampler_test PRIVATE Parthenon::parthenon hflux::hflux)
+add_test(NAME kin_la_sampler
+         COMMAND ${CMAKE_SOURCE_DIR}/tests/avalanche/run_la_sampler_check.sh $<TARGET_FILE:la_sampler_test>)
+set_tests_properties(kin_la_sampler PROPERTIES LABELS "kinetic" TIMEOUT 600)

@@ -73,6 +73,11 @@ void AddAvalancheParams(ParameterInput *pin, const AvalancheOptions &opt,
   if (e_axis != "fixed" && e_axis != "axis")
     throw std::invalid_argument("Avalanche/E_axis must be fixed or axis");
   if (e_axis == "axis") pkg->AddParam("E_R_axis", 1);
+  // Avalanche/la_sampler: reference (default) or fast (LargeAngleCollisionFast).
+  const std::string la = pin->GetOrAddString("Avalanche", "la_sampler", "reference");
+  if (la != "reference" && la != "fast")
+    throw std::invalid_argument("Avalanche/la_sampler must be reference or fast");
+  if (la == "fast") pkg->AddParam("la_fast", 1);
   // The analytic q profile also maps the ring radius r_0 to psi_n for the
   // file field source, so that one deck table drives both.
   const auto af = ReadAnalyticField(pin, E_0, 3.0, 1.0);

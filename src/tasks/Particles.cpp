@@ -369,6 +369,10 @@ TaskStatus AddSecondaries(MeshBlock* pmb, const Real dtLA) {
                              ? pkg->Param<Real>("gamma_min_dyn")
                              : pkg->Param<Real>("gamma_min");
   auto rng_pool = pkg->Param<Kinetic::RNGPool>("rng_pool");
+  // la_fast (set by avalanche/hybrid with <..>/la_sampler = fast): the
+  // secondary (gamma, xi) from LargeAngleCollisionFast, same distribution with
+  // efficient proposals; otherwise the reference rejection sampler.
+  const bool la_fast = pkg->AllParams().hasKey("la_fast");
   auto data = pmb->meshblock_data.Get();
   auto swarm = data->GetSwarmData()->Get("particles");
   auto desc_swarm_r = parthenon::MakeSwarmPackDescriptor<
@@ -454,7 +458,10 @@ TaskStatus AddSecondaries(MeshBlock* pmb, const Real dtLA) {
               Real xi = pack_swarm_r(b, Kinetic::xi(), n_primary);
               Real w = pack_swarm_r(b, Kinetic::weight(), n_primary);
 
-              LargeAngleCollision(p, xi, w, dtLA, gamma_min, rng_pool);
+              if (la_fast)
+                LargeAngleCollisionFast(p, xi, w, dtLA, gamma_min, rng_pool);
+              else
+                LargeAngleCollision(p, xi, w, dtLA, gamma_min, rng_pool);
               if (p > 0.0) {
                 pack_swarm_i(b, Kinetic::status(), n) = Kinetic::ALIVE;
                 pack_swarm_r(b, Kinetic::p(), n) = p;
