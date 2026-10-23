@@ -60,8 +60,8 @@ int main(int argc, char *argv[]) {
     // With a dynamic threshold, set it (and p_BC, p_RE) from the initial field
     // before the first push rather than after the first current deposition.
     if (dyn_gmin == 1) {
-      const Real tau_c = pm->packages.Get("Deck")->Param<Real>("tau_c");
-      UpdateMomentumBoundary(pm, tm.time / tau_c, tm.time / tau_c);
+      // t = 0: the start of the step, the time origin of the in-step fields E + Et t.
+      UpdateMomentumBoundary(pm, 0.0, 0.0);
       Kinetic::Log::Info("Momentum boundary from max |E_par|: p_BC = {:g}, gamma_min = {:g}",
                          pm->packages.Get("Deck")->Param<Real>("p_BC"),
                          pm->packages.Get("Deck")->Param<Real>("gamma_min_dyn"));

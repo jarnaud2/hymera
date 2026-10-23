@@ -78,7 +78,9 @@ TaskCollection HybridDriver::MakeTaskCollection(BlockList_t &blocks, SimTime tm)
       }
     }
     dep = tl->AddTask(dep, RandomRemove, pmesh);
-    Real time =  tm.time / tau_c + (iCD+1) * dtCD;
+    // The fields within the MHD step are E + Et t with t from the start of the
+    // step (as in the push, t0 above), so the deposition step is [iCD, iCD + 1] dtCD.
+    const Real time = (iCD + 1) * dtCD;
     AttachCurrentCollector(tl, dep, pmesh, dtCD);
     dep = tl->AddTask(dep, UpdateMomentumBoundary, pmesh, time - dtCD, time);
   }
