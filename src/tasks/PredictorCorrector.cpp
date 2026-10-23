@@ -37,8 +37,26 @@ void AttachFieldCorrector(TaskList* tl, TaskID& dep,
 
   auto pkg = pm->packages.Get("Deck");
   auto Jre_mhd = pkg->Param<DualView3>("Jre_mhd");
-  // Keep this step's runaway current for the output diagnostics (Jre_last, set
-  // by hybrid with Hybrid/midplane_profile = 1): the corrector zeroes Jre_mhd.
+  // Jre_mhd holds the sum of the nCD current-deposition averages of this MHD step
+  // (AttachCurrentCollector); the MHD solver expects their time average over the
+  // step, in the same units (eta J in B_0 V_A).
+  const int nCD = pkg->Param<int>("nCD");
+  dep = tl->AddTask(dep, [Jre_mhd, nCD]() mutable {
+    Jre_mhd.sync_device();
+    auto j = Jre_mhd.view_device();
+    const Real scl = 1.0 / nCD;
+    Kokkos::parallel_for("Average Jre_mhd",
+        Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {j.extent_int(0), j.extent_int(1)}),
+        KOKKOS_LAMBDA(const int i, const int k) {
+          j(i, k, 0) *= scl;
+          j(i, k, 1) *= scl;
+          j(i, k, 2) *= scl;
+        });
+    Jre_mhd.modify_device();
+    return TaskStatus::complete;
+  });
+  // Keep this step's runaway current, as passed to MHD, for the output diagnostics
+  // (Jre_last, set by hybrid with Hybrid/midplane_profile = 1): the corrector zeroes Jre_mhd.
   if (pkg->AllParams().hasKey("Jre_last")) {
     auto last = pkg->Param<View3>("Jre_last");
     dep = tl->AddTask(dep, [Jre_mhd, last]() mutable {
