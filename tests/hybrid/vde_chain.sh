@@ -10,13 +10,14 @@
 # of the VDE (exit 3), or when RUN/STOP exists.
 #
 # JOBID: an allocation to use first (else one is requested).
-# Environment: RUN_BASE (run directory base), DECK, ID (problem_id), for other runs.
+# Environment: RUN_BASE (run directory base), DECK, ID (problem_id), EXE (the hybrid
+# binary) and TOOLS (the checkout of the live-plot scripts), for other runs.
 set -u
 A=$PSCRATCH/agent
 B=${RUN_BASE:-$A/results/vde_full}   # holds inputs -> the owner's inputs (read only)
 W=$B/r1/r2                     # run directory
-EXE=$A/build-full-gpu/bin/hybrid
-TOOLS=$A/vde_full_tools
+EXE=${EXE:-$A/build-full-gpu/bin/hybrid}
+TOOLS=${TOOLS:-$A/vde_full_tools}   # a checkout holding tests/hybrid/vde_live.py
 PY=${PY:-/global/common/software/nersc/pe/conda-envs/26.8.1/python-3.13/nersc-python/bin/python3}
 DECK=${DECK:-vde_full.input}
 ID=${ID:-vde_full}            # problem_id of the deck; also the allocation name
