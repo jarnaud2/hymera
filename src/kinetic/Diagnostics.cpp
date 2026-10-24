@@ -440,4 +440,31 @@ void WriteMidplaneProfile(Mesh *pm, SimTime const &tm) {
   diag->Flush();
 }
 
+// The runaway current of the last MHD step as handed to the MHD solve
+// (Jre_last: the time average over the step of the current-deposition averages,
+// eta J in units of B_0 V_A), on the MHD cell grid, written at each output to
+// /profiles/jre_c<cycle> (hybrid, with Hybrid/jre_map = 1). Flattened with R
+// fastest: columns R, Z (cell centres, a) and J_R, J_phi, J_Z.
+void WriteJreMap(Mesh *pm, SimTime const &tm) {
+  auto *diag = DiagnosticsFile::Get();
+  auto pkg = pm->packages.Get("Deck");
+  auto cdg = pkg->Param<ConfigurationDomainGeometry>("CDG");
+  auto jre = pkg->Param<View3>("Jre_last");
+  auto h = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), jre);
+  if (diag == nullptr) return;
+  const auto il = cdg.indicator_locator;
+  const int nR = h.extent_int(0), nZ = h.extent_int(1);
+  std::vector<std::vector<double>> cols(5, std::vector<double>(static_cast<size_t>(nR) * nZ));
+  for (int j = 0; j < nZ; ++j)
+    for (int i = 0; i < nR; ++i) {
+      const size_t k = static_cast<size_t>(j) * nR + i;
+      cols[0][k] = il.R0 + i * il.dR;
+      cols[1][k] = il.Z0 + j * il.dZ;
+      for (int c = 0; c < 3; ++c) cols[2 + c][k] = h(i, j, c);
+    }
+  diag->WriteProfile(std::format("jre_c{:06d}", tm.ncycle),
+                     {"R", "Z", "J_R", "J_phi", "J_Z"},
+                     {"a", "a", "eta J (B_0 V_A)", "eta J (B_0 V_A)", "eta J (B_0 V_A)"}, cols);
+}
+
 } // namespace Kinetic

@@ -29,12 +29,16 @@ int main(int argc, char *argv[]) {
   // <Hybrid> options, read only here so other executables' parameter dumps are
   // unchanged; both off by default.
   //   midplane_profile = 1   write /profiles/midplane_c<cycle> at each output
+  //   jre_map = 1            write /profiles/jre_c<cycle>, the 2-D runaway current passed to MHD
   //   update_gamma_min = 1   secondary threshold gamma_min = 2 (gamma_BC - 1) + 1
   //                          following the momentum boundary set by max |E_par|
   // Read only when the block is in the deck, so runs without it keep their
   // parameter dump (and the regression fingerprint) unchanged.
   const bool hb = pman.pinput->DoesBlockExist("Hybrid");
   const int midplane = hb ? pman.pinput->GetOrAddInteger("Hybrid", "midplane_profile", 0) : 0;
+  // Read only when present, so that the parameter dump of other runs is unchanged.
+  const int jre_map = hb && pman.pinput->DoesParameterExist("Hybrid", "jre_map")
+                          ? pman.pinput->GetInteger("Hybrid", "jre_map") : 0;
   const int dyn_gmin = hb ? pman.pinput->GetOrAddInteger("Hybrid", "update_gamma_min", 0) : 0;
   const bool la_fast = hb && pman.pinput->GetOrAddString("Hybrid", "la_sampler", "reference") == "fast";
   const Real gmin_floor =
@@ -47,7 +51,7 @@ int main(int argc, char *argv[]) {
       pkg->AddParam("gamma_min_floor", gmin_floor);
     }
     if (la_fast) pkg->AddParam("la_fast", 1);
-    if (midplane == 1) {
+    if (midplane == 1 || jre_map == 1) {
       const auto j = pkg->Param<DualView3>("Jre_mhd");
       pkg->AddParam("Jre_last", View3("Jre_last", j.extent(0), j.extent(1)));
     }
@@ -75,6 +79,7 @@ int main(int argc, char *argv[]) {
   pman.app_input->UserMeshWorkBeforeOutput = [=](Mesh * pm, ParameterInput * pin, SimTime const & tm) {
     Kinetic::WorkBeforeOutput(pm, pin, tm, p_mhd_config);
     if (midplane == 1) Kinetic::WriteMidplaneProfile(pm, tm);
+    if (jre_map == 1) Kinetic::WriteJreMap(pm, tm);
   };
 
   Kinetic::AttachDiagnostics(pman);

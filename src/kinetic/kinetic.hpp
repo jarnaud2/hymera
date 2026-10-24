@@ -84,6 +84,7 @@ void PlotGCETime(Mesh * pm, ParameterInput * pin, SimTime const & tm, User* mhd_
 void PlotCurrents(Mesh * pm, ParameterInput * pin, SimTime const & tm, User* mhd_context);
 /// Radial profile of E and the Ohmic and runaway currents at Z = Zc (hybrid).
 void WriteMidplaneProfile(Mesh *pm, SimTime const &tm);
+void WriteJreMap(Mesh *pm, SimTime const &tm);
 void WorkBeforeRestartOutput(Mesh * pm, ParameterInput * pin, OutputParameters * op, User* mhd_context);
 void WorkBeforeLoop(Mesh * pm, User* mhd_context);
 TaskStatus HijackEField(Mesh * pm);
