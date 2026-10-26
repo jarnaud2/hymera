@@ -14,8 +14,14 @@ void AttachFieldPredictor(TaskList* tl, TaskID& dep,
   const Real En       = pkg->Param<Real>("En");
   auto Jre_mhd = pkg->Param<DualView3>("Jre_mhd");
 
+  View3 Jre_seed = pkg->Param<View3>("Jre_seed");
+
   dep = tl->AddTask(dep, CommunicateBJV, data, p_mhd_config, FieldComponents::B);
   dep = tl->AddTask(dep, ComputeBaseElectricField, E_base, data, En, eta_norm, FieldComponents::B);
+  // CommunicateBJV leaves V in the E slot. Put E there too (the same arithmetic as
+  // E_base), so that InterpolateTime takes Et = (E_end - E_start) / dt, as in
+  // SetupFieldGrid. Before, it took (E_end - V) / dt, about E_end / dt.
+  dep = tl->AddTask(dep, ComputeBaseElectricField_in_place, data, En, eta_norm, FieldComponents::B);
 
   dep = tl->AddTask(dep, AdvanceBackgroundFields, p_mhd_config, Jre_mhd);
 
@@ -24,7 +30,10 @@ void AttachFieldPredictor(TaskList* tl, TaskID& dep,
 
   dep = tl->AddTask(dep, InterpolateTime, data, dtField);
 
-  dep = tl->AddTask(dep, ComputeAdjustedElectricField, data, E_base, Jre, En);
+  // The first current-deposition interval has no current of its own yet: correct
+  // its E with the previous step's runaway current (the time average MHD received),
+  // not with zero. Jre itself stays zero for the deposition.
+  dep = tl->AddTask(dep, ComputeAdjustedElectricField, data, E_base, Jre_seed, En);
   dep = tl->AddTask(dep, InterpolateHermiteBJE, data, FieldComponents::B);
 
   dep = tl->AddTask(dep, InterpolateHermiteBJE, data, FieldComponents::Bt);
@@ -53,6 +62,14 @@ void AttachFieldCorrector(TaskList* tl, TaskID& dep,
           j(i, k, 2) *= scl;
         });
     Jre_mhd.modify_device();
+    return TaskStatus::complete;
+  });
+  // Keep this step's runaway current, as passed to MHD, for the first deposition
+  // interval of the next step (AttachFieldPredictor): the corrector zeroes Jre_mhd.
+  auto seed = pkg->Param<View3>("Jre_seed");
+  dep = tl->AddTask(dep, [Jre_mhd, seed]() mutable {
+    Jre_mhd.sync_device();
+    Kokkos::deep_copy(seed, Jre_mhd.view_device());
     return TaskStatus::complete;
   });
   // Keep this step's runaway current, as passed to MHD, for the output diagnostics

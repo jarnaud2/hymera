@@ -266,6 +266,13 @@ FieldGridResult SetupFieldGrid(ParameterInput *pin, const KineticParams &prm,
 
   pkg->AddParam("Jre_mhd", Jre_mhd);
 
+  // The runaway current of the last MHD step, as passed to MHD; it corrects E in
+  // the first current-deposition interval of the next step. Kept across a restart
+  // in a side file of the MHD restart file (WorkBeforeRestartOutput).
+  View3 Jre_seed("Jre_seed", NR, NZ);
+  Kokkos::deep_copy(Jre_seed, 0.0);
+  pkg->AddParam("Jre_seed", Jre_seed);
+
   Real Psi_min = 0.0;
   // Fill the interpolated (Hermite) field grid from the MHD solver. When there
   // is no MHD context (mhd_context == nullptr, e.g. the `profile` executable),

@@ -16,6 +16,7 @@
 #include <numeric>
 #include <iostream>
 #include <format>
+#include <fstream>
 #include <random>
 #include <typeinfo>  //for 'typeid' to work
 #include <parthenon/package.hpp>
@@ -78,6 +79,16 @@ void WorkBeforeRestartOutput(Mesh * pm, ParameterInput * pin, OutputParameters *
 
   auto pkg = pm->packages.Get("Deck");
   pkg->UpdateParam("mhd_restart_filename", filename);
+
+  // The runaway current that corrects E in the next step's first deposition
+  // interval (Jre_seed). It is identical on every rank (reduced over MPI).
+  if (Globals::my_rank == 0) {
+    auto seed = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
+                                                    pkg->Param<View3>("Jre_seed"));
+    std::ofstream out(filename + ".jre", std::ios::binary);
+    out.write(reinterpret_cast<const char *>(seed.data()), seed.size() * sizeof(Real));
+    PARTHENON_REQUIRE_THROWS(out.good(), "cannot write " + filename + ".jre");
+  }
 }
 
 void WorkBeforeLoop(Mesh * pm, User* mhd_context) {
@@ -87,6 +98,20 @@ void WorkBeforeLoop(Mesh * pm, User* mhd_context) {
     auto filename = pkg -> Param<std::string>("mhd_restart_filename");
 
     MHD_CHECK(mhd_loadsolution(mhd_context, filename.c_str()));
+
+    // Restart files written before Jre_seed existed have no side file: the seed
+    // then stays zero for the first step, as all steps had it before.
+    auto seed = pkg->Param<View3>("Jre_seed");
+    auto seed_h = Kokkos::create_mirror_view(Kokkos::HostSpace(), seed);
+    std::ifstream in(filename + ".jre", std::ios::binary);
+    if (in) {
+      in.read(reinterpret_cast<char *>(seed_h.data()), seed_h.size() * sizeof(Real));
+      PARTHENON_REQUIRE_THROWS(in.gcount() == static_cast<std::streamsize>(seed_h.size() * sizeof(Real)),
+                               filename + ".jre is shorter than the runaway current grid");
+      Kokkos::deep_copy(seed, seed_h);
+    } else {
+      Log::Info("Restart: no {}.jre; the first step starts without a runaway current", filename);
+    }
   }
 }
 
